@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "sift-research"
 version = "0.1.0"
-description = "A lifecycle toolkit for exploratory research code"
+description = "Organize research code and reproduce experiments with coding agents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

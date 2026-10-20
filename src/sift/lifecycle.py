@@ -45,7 +45,7 @@ def create_exploration(
         encoding="utf-8",
     )
     (path / "experiment.py").write_text(
-        '"""Exploratory code; use maintained capabilities from core."""\n',
+        '"""Exploratory code; import reusable functions and modules from core."""\n',
         encoding="utf-8",
     )
     if notebook:
@@ -87,7 +87,7 @@ def preserve(
                 "status": "preserved",
                 "run_id": run_id,
                 "core_source_hash": run_record.get("source_hash") if run_record else None,
-                "reproduction": f"sift replay {run_id}" if run_id else "No recorded run attached.",
+                "reproduction": f"sift replay {run_id}" if run_id else "No experiment run linked.",
             },
         )
         return destination

@@ -3,8 +3,8 @@
 </p>
 
 <p align="center">
-  <strong>Research moves fast. Your core should stay understandable.</strong><br>
-  A Python toolkit, CLI, and agent workflow for the full life of research code.
+  <strong>Explore in scratch. Keep reusable code in core.</strong><br>
+  A Python toolkit for organizing research code and reproducing experiments with coding agents.
 </p>
 
 <p align="center">
@@ -13,26 +13,28 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-06b6d4" alt="MIT"></a>
 </p>
 
-A motivation becomes a preliminary analysis, then a method, another dataset, another model, and an
-ablation. Agents can write each iteration well while the accumulated code becomes difficult to
-understand, reproduce, and change.
+Research code grows through preliminary analyses, new methods, additional datasets and models, and
+ablations. As agents add each iteration, shared code and experiment-specific code become entangled,
+making the project harder to understand, reproduce, and extend.
 
-Sift gives those iterations a lifecycle. Explore in scratch. Preserve a specific procedure when it
-matters. Extract a maintained capability when its interface is justified. Review the exact change
-before it reaches core. Retire obsolete working files without losing their research record.
+Sift separates reusable code from exploratory work. Try ideas in scratch, keep experiment scripts
+that you need to rerun, and move reusable functions into core after testing and code review. Save
+the code, inputs, environment information, and outputs for each experiment run so earlier results
+can be checked after the project changes. Archive unused code when you no longer need it.
 
-![The Sift lifecycle: explore, record, preserve, review, promote, and retire.](assets/workflow.svg)
+![Sift workflow: exploratory code, experiment runs, code review, reusable modules, and archived code.](assets/workflow.svg)
 
-### Three places for code. A separate record for evidence.
+### Organize research code
 
 | Place | What belongs there | What it can depend on |
 |---|---|---|
-| **Core** | Supported, tested capabilities with explicit interfaces | Other permitted core capabilities |
-| **Experiments** | Maintained recipes for particular scientific procedures | Core and their own local modules |
-| **Scratch** | New methods, small analyses, debugging, uncertain implementations | Core and their own local modules |
+| **Core** | Tested, reusable modules: data loading, model components, training, evaluation | Other core modules, subject to the project's import rules |
+| **Experiments** | Experiment scripts and configurations you want to keep and rerun | Core and the experiment's own modules |
+| **Scratch** | Exploratory scripts, notebooks, debugging, and one-off analyses | Core and the exploration's own modules |
 
-A useful one-off analysis can remain an experiment. A reusable component can implement a scientific
-hypothesis that still needs evaluation. Sift keeps maintenance status separate from scientific validity.
+A script can be worth keeping because it reproduces a reported result, even if no other experiment
+will reuse it. Core is for code shared across experiments. Moving code into core means committing to
+maintaining it; it does not establish that the underlying method works.
 
 ### Install
 
@@ -49,7 +51,7 @@ sift init
 sift explore calibrated-scoring --question "Does calibration improve retrieval?"
 ~~~
 
-Map existing directories in `research.toml`. There is no required training framework or pipeline DAG.
+Map existing directories in `research.toml`. You can keep your existing training framework and scripts.
 
 ### Try a complete, runnable example
 
@@ -64,8 +66,9 @@ sift run "python scratch/baseline/experiment.py" --artifact results/metrics.json
 sift run "python scratch/expanded/experiment.py" --artifact results/metrics.json --input dataset=data/shifted.json --seed 7
 ~~~
 
-The second recipe adds a dataset, model, and metric while core stays unchanged. Attach the baseline
-run's printed ID to its maintained recipe, then retire its scratch files:
+The second experiment adds a dataset, model, and metric while core stays unchanged. Use the baseline
+run's printed ID to keep the version of the script that produced its results, then archive its scratch
+directory:
 
 ~~~bash
 sift preserve baseline --name baseline-study --run RUN_ID
@@ -73,43 +76,47 @@ sift retire path scratch/baseline
 sift replay RUN_ID
 ~~~
 
-Replay uses the original source and captured inputs, even after the current core changes.
-The finalized run record stays unchanged; replay produces a separate evidence record.
+`sift replay` reruns the experiment using its saved code and inputs, even after core changes.
+It compares the new outputs with the original results and saves the comparison separately.
 
-### Promotion is a reviewed patch
+### Move reusable code into core through code review
 
 ~~~bash
-sift promote prepare --title "Share the calibrated scorer" --rationale "Two studies need this capability"
+sift promote prepare --title "Share the calibrated scorer" --rationale "Two experiments use this scoring function"
 ~~~
 
-Edit the returned **candidate workspace**. Extract the smallest useful interface, update callers, and
-add independent correctness checks plus a bounded comparison with the reference behavior.
+Edit the separate working copy created by this command. Extract the reusable function or module,
+update the experiment scripts that call it, and test its expected behavior. Where relevant, compare
+its outputs with the original implementation to check that refactoring preserves the results.
 
 ~~~bash
 sift promote seal PROPOSAL_ID
 sift promote show PROPOSAL_ID
 ~~~
 
-Sealing runs mandatory boundary checks and the configured checks. Extra `--check` commands supplement
-them. The proposal includes a readable diff, a review report, file hashes, check results, and a digest.
+`sift promote seal` runs the import dependency checks and your configured tests, then saves a fixed
+version of the proposed changes for review. Additional `--check` commands supplement those checks.
+The review includes the code diff, test results, and a checksum identifying that version.
 
-A human reviews that candidate and runs these commands in a human-controlled terminal:
+A researcher reviews the changes and runs these commands in their terminal:
 
 ~~~bash
 sift promote approve PROPOSAL_ID
 sift promote apply PROPOSAL_ID
 ~~~
 
-**Passing tests does not grant approval.** Editing the candidate, diff, or check report invalidates
-the seal. Resealing revokes earlier approval. Changes to core, tests, configuration, or affected
-callers require a new review. Interrupted application is journaled and can resume without silently
-overwriting conflicting edits.
+**Passing tests does not grant approval.** Approval applies only to the reviewed version. Changes to
+the proposed code, diff, or test report require running `seal` again and obtaining new approval.
+Changes to the original project's core, tests, configuration, or affected scripts also require a new
+review. If applying an approved change is interrupted, Sift can resume after checking for conflicting edits.
 
-### Record executions, not just metrics
+### Track experiment runs and reproduce results
 
-Each run captures a pristine source tree and executes in a separate working copy. It records the
-command, parent run, declared change, captured inputs and hashes, seeds, runtime information,
-environment files, logs, and registered outputs. Missing outputs cannot be replaced by stale files.
+An **experiment run** is one execution of a script or command. Sift saves a snapshot of the source
+code and runs a separate copy. It logs the command, related previous run, description of the change,
+inputs and their hashes, random seeds, runtime information, dependency files, logs, and specified
+output files (**artifacts**). It removes previous copies of those outputs before execution so stale
+results cannot be mistaken for new ones.
 
 ~~~bash
 sift run "python scratch/my-method/train.py" --artifact results/metrics.json --input dataset=data/train.json --seed 7 --meta model=small
@@ -117,30 +124,33 @@ sift run "python scratch/my-method/train.py" --artifact results/metrics.json --i
 
 Seeds are recorded and exposed as `SIFT_SEEDS`; your experiment remains responsible for setting its
 random generators. Captured inputs are available through `SIFT_INPUT_NAME`. An unresolved identifier
-is recorded explicitly and cannot produce a replay-verified claim.
+is logged, but is not sufficient to verify that the results can be reproduced.
 
 For stochastic outputs, supply `--verify "python verify.py"`. That program encodes your numerical
-tolerances or statistical criteria and can read original outputs from `SIFT_REFERENCE` on replay.
-Without a verifier, replay requires matching registered artifact hashes.
+tolerances or statistical criteria and can read original outputs from `SIFT_REFERENCE` when rerunning
+the experiment. Without this comparison program, Sift checks whether the specified output files have
+identical hashes.
 
 Use `--environment uv` to reconstruct a project from its frozen `uv.lock`. The default preserves the
 selected project environment. Sift does not promise bitwise reproducibility across different GPU stacks.
 
-### Reuse deliberate computations. Execute fresh trials.
+### Cache intermediate results
 
 ~~~bash
 sift cache key --code encoder-v3 --input dataset-sha256 --config batch=32 --seed 7 --environment torch-v2
 sift cache key --code encoder-v3 --input dataset-sha256 --seed 7 --fresh
 ~~~
 
-Stable keys support reuse; `--fresh` adds a trial nonce. Cache objects are content-addressed.
-Reusing one key for different content fails. Code, input, parameter, seed, and environment identities
-are explicit: Sift does not infer every dependency of arbitrary Python code.
+Use a cache key to reuse an expensive computation, such as preprocessing or feature extraction.
+Include the code version, input data, configuration, random seed, and environment that affect its
+output. `--fresh` adds a unique identifier for a new run; it does not change the random seed or
+guarantee statistical independence. Sift stores files by content hash and rejects different outputs
+under the same key. It cannot automatically identify every dependency of arbitrary Python code.
 
-Drop an obsolete cache reference with `sift cache drop KEY`. Its object remains until a reviewed
-cleanup plan establishes that nothing retains it.
+Remove an unused key with `sift cache drop KEY`. The cached file remains until cleanup confirms that
+no runs, cache entries, or pins still reference it.
 
-### Cleanup with a way back
+### Archive unused code and clean up old files
 
 ~~~bash
 sift retire path scratch/old-idea
@@ -149,12 +159,14 @@ sift pin RUN_ID
 sift gc plan
 ~~~
 
-Retirement checks maintained dependencies and active run records, verifies an archive, then removes
-the active directory. Restore verifies archive integrity. GC considers retention age and references
-from preserved recipes, run ancestry, replays, pending proposals, cache entries, and pins.
+`sift retire` checks whether maintained code or active runs depend on the directory, verifies an
+archive copy, then removes the directory from the working project. `restore` checks the archive
+before copying it back. Cleanup considers file age and references from saved experiments, related
+runs, rerun comparisons, pending code changes, cache entries, and pinned items.
 
-A human applies the exact cleanup plan with `sift gc apply PLAN_ID`. Newly added pins or references
-invalidate a plan. **Permanent GC deletion cannot be undone by Sift.**
+A researcher reviews the files listed by `sift gc plan`, then applies that plan with
+`sift gc apply PLAN_ID`. New pins or references invalidate the plan. **Files permanently deleted by
+`sift gc apply` cannot be restored by Sift.**
 
 ### Agent skill and harness
 
@@ -166,20 +178,22 @@ sift skill install
 sift skill install --target /path/to/agent/skills
 ~~~
 
-The [skill](skills/sift/SKILL.md) teaches exploration, preservation, interface design, evidence
-reporting, and retirement. It reserves promotion approval/application and permanent GC for a human.
+The [skill](skills/sift/SKILL.md) guides the agent through exploratory coding, saving experiment
+scripts, refactoring shared code, reporting tests and results, and archiving unused code. A human
+must approve and apply core changes and permanent cleanup.
 
-The [harness](harness/README.md) provides command gates, write-path checks, and an agent launcher:
+The [harness](harness/README.md) checks which commands an agent may run and which files it may edit,
+and can launch an agent in a separate working copy:
 
 ~~~bash
 sift harness policy
-sift harness guard -- sift promote prepare --title "New capability"
+sift harness guard -- sift promote prepare --title "Shared evaluation function"
 sift harness launch -- your-coding-agent
 ~~~
 
-The default launcher gives the agent an isolated candidate and detects changes to the original core.
+The default launcher gives the agent a separate working copy and detects changes to the original core.
 It is **not an OS sandbox**. On Linux, `--sandbox bubblewrap` supplies a read-only filesystem with a
-writable candidate. Otherwise, connect the supplied policy to your host's filesystem/tool permissions.
+writable working copy. Otherwise, connect the supplied policy to your host's filesystem/tool permissions.
 Interactive input alone cannot authenticate a human against an unrestricted same-user agent.
 
 ### Integrations without a new research framework
@@ -192,7 +206,7 @@ Interactive input alone cannot authenticate a human against an unrestricted same
 | **Artifact storage** | `sift artifact put/get --store PATH` works with local or mounted storage |
 | **Existing remote stores** | `CommandArtifactStore` adapts explicit upload/download argv and verifies downloaded content |
 | **Schedulers** | `sift run ... --launcher "srun --partition=gpu"` delegates execution on a shared filesystem |
-| **Python** | [`sift.api`](src/sift/api.py) exposes the lifecycle operations and artifact adapter contracts |
+| **Python** | [`sift.api`](src/sift/api.py) provides the same operations and storage adapters for Python code |
 
 The scheduler launcher is synchronous and expects the source path and environment to be accessible
 on the execution node. It does not upload a project or provision a cluster. Plain Python callables
@@ -200,7 +214,7 @@ provide replaceable experimental components; adopting Hamilton or another graph 
 
 ### Commands and documentation
 
-| Lifecycle | Commands |
+| Task | Commands |
 |---|---|
 | Start and run | `init` · `explore` · `run` |
 | Understand and validate | `inspect` · `check` · `doctor` |
@@ -210,7 +224,7 @@ provide replaceable experimental components; adopting Hamilton or another graph 
 | Connect an agent | `skill` · `harness` |
 
 Use `sift --json COMMAND` for structured output. Human approval keeps its review visible in the terminal.
-[Design and configuration](docs/design.md) · [Acceptance coverage](docs/acceptance.md) ·
+[Design and configuration](docs/design.md) · [Test coverage](docs/acceptance.md) ·
 [Runnable example](examples/minimal/README.md) · [Agent workflow](skills/sift/references/workflows.md)
 
 ### Develop

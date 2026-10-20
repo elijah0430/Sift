@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 445" role="img" aria-labelledby="title desc">
-  <title id="title">The Sift research code lifecycle</title>
-  <desc id="desc">Scratch can become a recorded run, a preserved experiment, a reviewed core promotion, or a recoverable archive. Recorded runs can be replayed to verify their declared results.</desc>
+  <title id="title">The Sift research workflow</title>
+  <desc id="desc">Run exploratory code and save its inputs and results. Keep experiment scripts, move reusable functions into core after code review, or archive unused code. Rerun experiments to compare outputs with earlier results.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 10 5 0 10z" fill="#64748b"/>
@@ -34,22 +34,22 @@
       <rect x="740" y="295" width="225" height="85" rx="12"/>
     </g>
     <g fill="#f1f5f9" font-size="18" font-weight="600">
-      <text x="320" y="69">Recorded run</text>
-      <text x="760" y="69">Replay</text>
-      <text x="320" y="199">Promotion candidate</text>
-      <text x="596" y="199" fill="#c4b5fd">Human review</text>
+      <text x="320" y="69">Experiment run</text>
+      <text x="760" y="69">Reproduce results</text>
+      <text x="320" y="199">Proposed changes</text>
+      <text x="596" y="199" fill="#c4b5fd">Code review</text>
       <text x="820" y="199" fill="#67e8f9">Core</text>
-      <text x="320" y="329">Experiment recipe</text>
-      <text x="760" y="329">Recoverable archive</text>
+      <text x="320" y="329">Experiment scripts</text>
+      <text x="760" y="329">Archived code</text>
     </g>
     <g fill="#94a3b8" font-size="13">
       <text x="320" y="94">Source · inputs · outputs</text>
-      <text x="760" y="94">Verify the declared result</text>
-      <text x="320" y="224">Interface · patch · checks</text>
-      <text x="596" y="224">Approve exact bytes</text>
-      <text x="820" y="224">Supported capabilities</text>
-      <text x="320" y="354">Preserve a specific procedure</text>
-      <text x="760" y="354">Retire working files safely</text>
+      <text x="760" y="94">Rerun and compare outputs</text>
+      <text x="320" y="224">Refactoring · diff · tests</text>
+      <text x="596" y="224">Human approval</text>
+      <text x="820" y="224">Reusable modules</text>
+      <text x="320" y="354">Keep code needed for reruns</text>
+      <text x="760" y="354">Restore when needed</text>
     </g>
   </g>
 </svg>

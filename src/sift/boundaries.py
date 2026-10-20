@@ -216,7 +216,7 @@ def check_boundaries(config: ProjectConfig) -> list[Violation]:
                             graph[start]["path"],
                             line,
                             imported,
-                            "declared independent core capabilities depend on each other",
+                            "core modules declared independent depend on each other",
                         )
                     )
                 if current != start and (

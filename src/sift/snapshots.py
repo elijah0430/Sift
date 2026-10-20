@@ -377,10 +377,10 @@ def replay_run(config: ProjectConfig, run_id: str) -> tuple[str, int, bool]:
     manifest = read_json(original / "manifest.json")
     if manifest.get("schema") != 2:
         raise SiftError(
-            "Legacy run schema cannot be replay-verified; its saved source is retained."
+            "Results from this older run format cannot be verified; the saved code is retained."
         )
     if manifest.get("status") != "completed":
-        raise SiftError("Only a completed successful run can be replay-verified.")
+        raise SiftError("Only a completed successful run can be rerun to verify its results.")
     if tree_hash(original / "source", ignores=()) != manifest["source_hash"]:
         raise SiftError("The recorded source snapshot is corrupted.")
     replay_id = short_id("replay")

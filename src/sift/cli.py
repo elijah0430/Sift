@@ -45,7 +45,7 @@ def _result(args, value: dict, message: str) -> None:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sift",
-        description="Explore freely. Keep what matters.",
+        description="Organize research code, track experiment runs, and reproduce results.",
     )
     parser.add_argument("--version", action="version", version="sift 0.1.0")
     parser.add_argument("--json", dest="json_output", action="store_true")
@@ -55,7 +55,7 @@ def _parser() -> argparse.ArgumentParser:
     init.add_argument("path", nargs="?", default=".")
     init.add_argument("--package")
 
-    explore = sub.add_parser("explore", help="Create an isolated scratch exploration")
+    explore = sub.add_parser("explore", help="Create a scratch directory for exploratory code")
     explore.add_argument("name")
     explore.add_argument("--question", default="")
     explore.add_argument("--from-run")
@@ -63,45 +63,67 @@ def _parser() -> argparse.ArgumentParser:
         "--notebook", action="store_true", help="Include a marimo scratch notebook"
     )
 
-    run = sub.add_parser("run", help="Run from a frozen source snapshot")
+    run = sub.add_parser(
+        "run", help="Run an experiment and save its code, inputs, logs, and outputs"
+    )
     run.add_argument("command_text")
-    run.add_argument("--artifact", action="append", default=[])
+    run.add_argument(
+        "--artifact", action="append", default=[], help="Output file or directory to save"
+    )
     run.add_argument("--parent")
     run.add_argument("--change")
     run.add_argument("--input", action="append", default=[], help="Record NAME=PATH_OR_ID")
-    run.add_argument("--seed", action="append", type=int, default=[])
+    run.add_argument(
+        "--seed",
+        action="append",
+        type=int,
+        default=[],
+        help="Log a seed; your code must set its RNGs",
+    )
     run.add_argument("--meta", action="append", default=[], help="Record NAME=VALUE")
-    run.add_argument("--verify", help="Command whose zero exit code accepts this run and replay")
+    run.add_argument(
+        "--verify", help="Command to check outputs; exit 0 means the comparison passed"
+    )
     run.add_argument("--environment", choices=["current", "uv"], default="current")
     run.add_argument("--cache-ref", action="append", default=[])
     run.add_argument(
         "--launcher", help="Shared-filesystem scheduler prefix, e.g. srun --partition=gpu"
     )
 
-    inspect = sub.add_parser("inspect", help="Inspect runs or promotion proposals")
+    inspect = sub.add_parser(
+        "inspect", help="Inspect experiment runs, proposed changes, or archives"
+    )
     inspect.add_argument("kind", choices=["runs", "proposals", "archive", "dependencies"])
     inspect.add_argument("identifier", nargs="?")
 
-    check = sub.add_parser("check", help="Check architectural boundaries")
+    check = sub.add_parser(
+        "check", help="Check import rules between core, experiments, and scratch"
+    )
     check.add_argument("--json", action="store_true")
     check.add_argument("--engine", choices=["builtin", "import-linter", "tach"])
 
-    preserve_parser = sub.add_parser("preserve", help="Preserve scratch as an experiment recipe")
+    preserve_parser = sub.add_parser("preserve", help="Keep scratch code as an experiment script")
     preserve_parser.add_argument("scratch_name")
     preserve_parser.add_argument("--name")
     preserve_parser.add_argument("--run", dest="run_id")
 
-    replay = sub.add_parser("replay", help="Replay a recorded run")
+    replay = sub.add_parser(
+        "replay", help="Rerun an experiment with saved code and inputs; compare outputs"
+    )
     replay.add_argument("run_id")
 
-    cache = sub.add_parser("cache", help="Manage explicit content-addressed computation outputs")
+    cache = sub.add_parser("cache", help="Cache intermediate results for reuse")
     cache_sub = cache.add_subparsers(dest="cache_command", required=True)
-    cache_key_parser = cache_sub.add_parser("key", help="Derive a reusable or fresh-trial key")
+    cache_key_parser = cache_sub.add_parser(
+        "key", help="Create a cache key from computation inputs"
+    )
     cache_key_parser.add_argument("--code", action="append", default=[])
     cache_key_parser.add_argument("--input", action="append", default=[])
     cache_key_parser.add_argument("--config", action="append", default=[])
     cache_key_parser.add_argument("--seed", action="append", type=int, default=[])
-    cache_key_parser.add_argument("--fresh", action="store_true")
+    cache_key_parser.add_argument(
+        "--fresh", action="store_true", help="Create a unique key; does not change random seeds"
+    )
     cache_key_parser.add_argument("--environment", action="append", default=[])
     cache_put_parser = cache_sub.add_parser("put", help="Store a file under an explicit key")
     cache_put_parser.add_argument("key")
@@ -114,31 +136,35 @@ def _parser() -> argparse.ArgumentParser:
     )
     cache_drop_parser.add_argument("key")
 
-    pin = sub.add_parser("pin", help="Protect or unprotect a record from garbage collection")
+    pin = sub.add_parser("pin", help="Keep a run or archive from being deleted during cleanup")
     pin.add_argument("identifier")
     pin.add_argument("--remove", action="store_true")
 
-    gc_parser = sub.add_parser("gc", help="Plan and apply retention-based cleanup")
+    gc_parser = sub.add_parser("gc", help="Review and permanently delete old, unreferenced files")
     gc_sub = gc_parser.add_subparsers(dest="gc_command", required=True)
     gc_sub.add_parser("plan", help="Create a reviewable cleanup plan")
     gc_apply = gc_sub.add_parser("apply", help="Interactively apply an unchanged cleanup plan")
     gc_apply.add_argument("plan_id")
 
-    promote = sub.add_parser("promote", help="Prepare and review exact core promotion patches")
+    promote = sub.add_parser("promote", help="Move reusable code into core through human review")
     promote_sub = promote.add_subparsers(dest="promote_command", required=True)
     promote_prepare = promote_sub.add_parser(
-        "prepare", help="Create an isolated candidate workspace"
+        "prepare", help="Create a separate working copy for proposed core changes"
     )
     promote_prepare.add_argument("--title", required=True)
     promote_prepare.add_argument("--rationale", default="")
     promote_prepare.add_argument("--baseline-run")
-    promote_seal = promote_sub.add_parser("seal", help="Freeze candidate patch and run checks")
+    promote_seal = promote_sub.add_parser(
+        "seal", help="Run checks and save a fixed version for review"
+    )
     promote_seal.add_argument("proposal_id")
     promote_seal.add_argument("--check", action="append", default=[])
-    promote_show = promote_sub.add_parser("show", help="Show the candidate, checks, and digest")
+    promote_show = promote_sub.add_parser(
+        "show", help="Show the proposed changes, check results, and checksum"
+    )
     promote_show.add_argument("proposal_id")
     promote_approve = promote_sub.add_parser(
-        "approve", help="Interactively approve the exact sealed patch"
+        "approve", help="Approve the reviewed version of the proposed core changes"
     )
     promote_approve.add_argument("proposal_id")
     promote_apply = promote_sub.add_parser("apply", help="Apply a human-approved patch")
@@ -146,12 +172,14 @@ def _parser() -> argparse.ArgumentParser:
 
     retire_parser = sub.add_parser("retire", help="Archive then remove scratch or an experiment")
     retire_sub = retire_parser.add_subparsers(dest="retire_command", required=True)
-    retire_path = retire_sub.add_parser("path", help="Retire a project-relative path")
+    retire_path = retire_sub.add_parser("path", help="Archive and remove a project directory")
     retire_path.add_argument("relative_path")
-    retire_restore = retire_sub.add_parser("restore", help="Restore a retired path")
+    retire_restore = retire_sub.add_parser("restore", help="Restore an archived directory")
     retire_restore.add_argument("retirement_id")
 
-    harness = sub.add_parser("harness", help="Expose and enforce host integration policy")
+    harness = sub.add_parser(
+        "harness", help="Configure agent command checks and allowed write paths"
+    )
     harness_sub = harness.add_subparsers(dest="harness_command", required=True)
     harness_sub.add_parser("policy", help="Print the machine-readable agent policy")
     guard = harness_sub.add_parser("guard", help="Reject commands reserved for a human")
@@ -160,17 +188,21 @@ def _parser() -> argparse.ArgumentParser:
     writer.add_argument("path")
     writer.add_argument("--proposal")
     launch_parser = harness_sub.add_parser(
-        "launch", help="Launch an agent in an isolated candidate"
+        "launch", help="Launch an agent in a separate working copy"
     )
     launch_parser.add_argument(
         "--sandbox", choices=["candidate", "bubblewrap"], default="candidate"
     )
     launch_parser.add_argument("agent_command", nargs=argparse.REMAINDER)
 
-    doctor_parser = sub.add_parser("doctor", help="Inspect live processes and interrupted records")
+    doctor_parser = sub.add_parser(
+        "doctor", help="Check running jobs and recover interrupted operations"
+    )
     doctor_parser.add_argument("--recover", action="store_true")
     doctor_parser.add_argument("--reindex", action="store_true")
-    export_parser = sub.add_parser("export", help="Export a portable run and its captured inputs")
+    export_parser = sub.add_parser(
+        "export", help="Export an experiment's code, inputs, metadata, and outputs"
+    )
     export_parser.add_argument("run_id")
     export_parser.add_argument("destination")
     artifact = sub.add_parser("artifact", help="Store files in local or mounted artifact storage")
