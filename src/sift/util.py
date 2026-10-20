@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -93,7 +94,20 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def is_link(path: Path) -> bool:
+    try:
+        information = path.lstat()
+    except FileNotFoundError:
+        return False
+    return stat.S_ISLNK(information.st_mode) or (
+        getattr(information, "st_reparse_tag", 0)
+        == getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", None)
+    )
+
+
 def relative_files(root: Path, ignores: Iterable[str] = DEFAULT_IGNORES) -> list[Path]:
+    if not root.is_dir() or is_link(root):
+        raise SiftError(f"Expected a real directory, not a symlink or junction: {root}")
     ignored = tuple(ignores)
 
     def excluded(path: Path) -> bool:
@@ -107,7 +121,7 @@ def relative_files(root: Path, ignores: Iterable[str] = DEFAULT_IGNORES) -> list
             path = Path(directory) / name
             if excluded(path):
                 continue
-            if path.is_symlink() or getattr(path, "is_junction", lambda: False)():
+            if is_link(path):
                 raise SiftError(f"Snapshot paths must not be symlinks or junctions: {path}")
             if path.is_file():
                 result.append(path.relative_to(root))
@@ -150,7 +164,7 @@ def contained_path(root: Path, relative: str | Path) -> Path:
     path = root
     for part in relative.parts:
         path = path / part
-        if path.is_symlink() or getattr(path, "is_junction", lambda: False)():
+        if is_link(path):
             raise SiftError(f"Symlink or junction is not allowed: {path}")
     if not path.resolve().is_relative_to(root.resolve()):
         raise SiftError(f"Path escapes its root: {relative}")
