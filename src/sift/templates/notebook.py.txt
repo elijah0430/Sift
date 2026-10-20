@@ -1,0 +1,27 @@
+# /// script
+# dependencies = ["marimo>=0.25.2"]
+# ///
+
+import marimo
+
+__generated_with = "0.25.2"
+app = marimo.App()
+
+
+@app.cell
+def _():
+    import marimo as mo
+
+    return (mo,)
+
+
+@app.cell
+def _(mo):
+    mo.md("""
+    Explore this research question.
+    """)
+    return
+
+
+if __name__ == "__main__":
+    app.run()

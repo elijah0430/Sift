@@ -1,0 +1,19 @@
+[paths]
+core = ["src"]
+experiments = "experiments"
+scratch = "scratch"
+tests = "tests"
+state = ".research"
+
+[checks]
+commands = ["python -m unittest discover -s tests"]
+
+[boundaries]
+public_api = ["toy_research.evaluate", "toy_research.mae"]
+acyclic = true
+
+[snapshot]
+ignore = ["results", ".venv"]
+
+[retention]
+archive_days = 90

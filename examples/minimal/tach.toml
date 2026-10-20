@@ -1,0 +1,9 @@
+source_roots = ["src"]
+
+[[modules]]
+path = "toy_research"
+depends_on = []
+
+[[interfaces]]
+from = ["toy_research"]
+expose = ["evaluate", "mae"]

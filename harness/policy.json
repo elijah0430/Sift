@@ -1,21 +1,21 @@
 {
-  "schema": 1,
   "actor": "agent",
+  "approval_authentication": "host-controlled; interactive input alone is not identity",
+  "bubblewrap_backend": "Linux read-only filesystem with writable candidate and temporary files",
+  "candidate_backend": "isolated working copy plus original-core change detection",
+  "human_only": [
+    "sift gc apply",
+    "sift promote apply",
+    "sift promote approve"
+  ],
+  "sandbox_backends": [
+    "candidate",
+    "bubblewrap"
+  ],
+  "schema": 1,
   "write_scopes": [
     "scratch/**",
-    "experiments/**",
     ".research/proposals/*/candidate/**"
-  ],
-  "read_scopes": ["**"],
-  "human_only_commands": [
-    "sift promote approve",
-    "sift promote apply"
-  ],
-  "invariants": [
-    "Core changes are prepared only inside a proposal candidate workspace.",
-    "Approval binds to the SHA-256 digest of the exact sealed patch.",
-    "Any reseal invalidates the previous approval.",
-    "Application aborts if any changed base file differs from the reviewed version."
   ]
 }
 

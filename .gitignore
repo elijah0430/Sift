@@ -11,8 +11,6 @@ build/
 *.egg-info/
 
 # Sift local state
-.research/runs/
-.research/replays/
-.research/proposals/
-.research/archive/
+.research/
+.dist-check/
 

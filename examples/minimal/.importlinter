@@ -1,0 +1,12 @@
+[importlinter]
+root_package = toy_research
+
+[importlinter:contract:core-independent]
+name = Evaluation does not import the public re-export facade
+type = forbidden
+source_modules =
+    toy_research.evaluation
+forbidden_modules =
+    toy_research
+as_packages = False
+unmatched_ignore_imports_alerting = error
