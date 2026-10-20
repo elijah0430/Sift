@@ -21,16 +21,7 @@ Sift gives those iterations a lifecycle. Explore in scratch. Preserve a specific
 matters. Extract a maintained capability when its interface is justified. Review the exact change
 before it reaches core. Retire obsolete working files without losing their research record.
 
-~~~mermaid
-flowchart LR
-    S["Scratch<br/>Explore an idea"] --> R["Recorded run<br/>Source · inputs · outputs"]
-    S --> E["Experiment recipe<br/>Preserve a specific procedure"]
-    S --> P["Promotion candidate<br/>Interface · patch · checks"]
-    P --> H{"Human review"}
-    H --> C["Core<br/>Maintained capabilities"]
-    S --> A["Recoverable archive"]
-    R --> V["Replay<br/>Verify the declared result"]
-~~~
+![The Sift lifecycle: explore, record, preserve, review, promote, and retire.](assets/workflow.svg)
 
 ### Three places for code. A separate record for evidence.
 
