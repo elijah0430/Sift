@@ -7,7 +7,6 @@ from pathlib import Path
 from .errors import SiftError
 from .util import DEFAULT_IGNORES, contained_path
 
-
 PROTECTED_FILES = (
     "research.toml",
     "pyproject.toml",
