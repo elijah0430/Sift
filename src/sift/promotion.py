@@ -8,7 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .boundaries import check_boundaries, run_boundary_engine
-from .config import ProjectConfig
+from .config import PROTECTED_FILES, ProjectConfig
 from .errors import SiftError
 from .snapshots import execution_environment
 from .util import (
@@ -41,7 +41,7 @@ def _file_state(root: Path, ignores=()) -> dict[str, str]:
 def _protected_state(config: ProjectConfig) -> dict:
     state = _file_state(config.root, config.snapshot_ignores)
     prefixes = [path.as_posix() + "/" for path in (*config.core, config.tests)]
-    files = {"research.toml", "pyproject.toml", "uv.lock", "requirements.txt"}
+    files = set(PROTECTED_FILES)
     files.update(path.as_posix() for path in config.core)
     return {
         name: value
@@ -308,10 +308,7 @@ def apply(config: ProjectConfig, proposal_id: str) -> None:
         baseline_config = replace(ProjectConfig.load(proposal / "base"), root=config.root)
         protected = _protected_state(baseline_config)
         protected_core = {
-            "research.toml",
-            "pyproject.toml",
-            "uv.lock",
-            "requirements.txt",
+            *PROTECTED_FILES,
             *(path.as_posix() for path in baseline_config.core),
         }
         if recovering:

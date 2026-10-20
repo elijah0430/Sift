@@ -442,10 +442,12 @@ def execute(args: argparse.Namespace) -> int:
     elif args.command == "export":
         print(export_run(config, args.run_id, Path(args.destination).resolve()))
     elif args.command == "artifact":
+        config.check_output_destination(Path(args.store))
         store = LocalArtifactStore(Path(args.store))
         if args.artifact_command == "put":
             _json(asdict(store.put(Path(args.file))))
         else:
+            config.check_output_destination(Path(args.destination))
             print(store.get(ArtifactRef(args.sha256, "", args.store), Path(args.destination)))
     return 0
 

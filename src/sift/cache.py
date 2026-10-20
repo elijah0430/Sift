@@ -65,6 +65,7 @@ def put(config: ProjectConfig, key: str, source: Path) -> dict[str, str]:
 
 @state_locked
 def get(config: ProjectConfig, key: str, destination: Path) -> dict[str, str]:
+    config.check_output_destination(destination)
     safe_id(key)
     entry = read_json(config.state_dir / "cache" / "entries" / f"{key}.json")
     object_path = config.state_dir / "cache" / "objects" / safe_id(entry["sha256"])

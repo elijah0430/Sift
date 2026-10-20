@@ -110,6 +110,7 @@ def rebuild_index(config: ProjectConfig) -> int:
 
 
 def export_run(config: ProjectConfig, run_id: str, destination: Path) -> Path:
+    config.check_output_destination(destination)
     source = config.state_dir / "runs" / safe_id(run_id)
     record = read_json(source / "manifest.json")
     if tree_hash(source / "source", ignores=()) != record["source_hash"]:

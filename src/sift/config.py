@@ -7,6 +7,19 @@ from pathlib import Path
 from .errors import SiftError
 from .util import DEFAULT_IGNORES, contained_path
 
+
+PROTECTED_FILES = (
+    "research.toml",
+    "pyproject.toml",
+    "uv.lock",
+    "requirements.txt",
+    "environment.yml",
+    "poetry.lock",
+    "Dockerfile",
+    ".python-version",
+    "AGENTS.md",
+)
+
 DEFAULT_CONFIG = """# Sift project configuration
 [paths]
 core = ["src"]
@@ -96,6 +109,24 @@ class ProjectConfig:
     @property
     def snapshot_ignores(self) -> set[str]:
         return {*DEFAULT_IGNORES, self.state.as_posix(), *self.ignores}
+
+    def check_output_destination(self, destination: Path) -> None:
+        target = destination.resolve()
+        protected = [
+            *self.core,
+            self.tests,
+            self.experiments,
+            Path(".git"),
+            *(Path(name) for name in PROTECTED_FILES),
+        ]
+        if any(target.is_relative_to((self.root / path).resolve()) for path in protected):
+            raise SiftError("Writes to maintained code or policy require a reviewed promotion.")
+        if target.is_relative_to(self.state_dir.resolve()):
+            parts = target.relative_to(self.state_dir.resolve()).parts
+            if not (len(parts) >= 3 and parts[0] == "proposals" and parts[2] == "candidate"):
+                raise SiftError(
+                    "This destination is protected Sift state, not a candidate workspace."
+                )
 
 
 def initialize_project(root: Path, package_name: str | None = None) -> ProjectConfig:
