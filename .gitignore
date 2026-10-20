@@ -1,0 +1,18 @@
+.venv/
+.package-smoke*/
+__pycache__/
+.pytest_cache/
+.pytest-local/
+.smoke/
+.ruff_cache/
+*.py[cod]
+dist/
+build/
+*.egg-info/
+
+# Sift local state
+.research/runs/
+.research/replays/
+.research/proposals/
+.research/archive/
+
