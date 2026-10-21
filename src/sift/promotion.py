@@ -54,6 +54,32 @@ def _protected_hash(config: ProjectConfig) -> str:
     return canonical_hash(_protected_state(config))
 
 
+def _initialize_review_repository(candidate: Path) -> bool:
+    if not shutil.which("git"):
+        return False
+    commands = (
+        ("init", "--quiet"),
+        ("config", "user.name", "Sift"),
+        ("config", "user.email", "sift@localhost"),
+        ("config", "core.autocrlf", "false"),
+        ("config", "core.filemode", "false"),
+        ("add", "--all"),
+        ("commit", "--quiet", "--message", "Sift review baseline"),
+    )
+    for arguments in commands:
+        completed = subprocess.run(
+            ["git", *arguments],
+            cwd=candidate,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if completed.returncode:
+            shutil.rmtree(candidate / ".git", ignore_errors=True)
+            return False
+    return True
+
+
 def prepare(
     config: ProjectConfig,
     title: str,
@@ -74,6 +100,7 @@ def prepare(
         proposal.mkdir(parents=True)
         copy_tree(config.root, proposal / "base", config.snapshot_ignores)
         copy_tree(proposal / "base", proposal / "candidate", ignores=())
+        review_repository = _initialize_review_repository(proposal / "candidate")
         write_json(
             proposal / "manifest.json",
             {
@@ -87,6 +114,7 @@ def prepare(
                 "created_at": utc_now(),
                 "base_tree_hash": tree_hash(proposal / "base", ignores=()),
                 "protected_hash": _protected_hash(config),
+                "review_repository": review_repository,
             },
         )
         return proposal_id, proposal / "candidate"
@@ -167,6 +195,8 @@ def _seal_payload(manifest: dict) -> dict:
     }
     if "review_hash" in manifest:
         payload["review_hash"] = manifest["review_hash"]
+    if "check_commands" in manifest:
+        payload["check_commands"] = manifest["check_commands"]
     return payload
 
 
@@ -176,6 +206,15 @@ def seal(config: ProjectConfig, proposal_id: str, commands: tuple[str, ...] = ()
         manifest = read_json(proposal / "manifest.json")
         if manifest["status"] in {"applied", "applying"}:
             raise SiftError("An applied or applying proposal cannot be resealed.")
+        feedback_path = proposal / "feedback.json"
+        feedback = read_json(feedback_path) if feedback_path.is_file() else None
+        if (
+            manifest["status"] == "changes_requested"
+            and feedback
+            and tree_hash(proposal / "candidate", config.snapshot_ignores)
+            == feedback.get("candidate_hash")
+        ):
+            raise SiftError("Revise the candidate before marking the proposal ready again.")
         (proposal / "approval.json").unlink(missing_ok=True)
         manifest["status"] = "checking"
         write_json(proposal / "manifest.json", manifest)
@@ -224,6 +263,7 @@ def seal(config: ProjectConfig, proposal_id: str, commands: tuple[str, ...] = ()
                     for name in changed
                 ],
                 "checks": checks,
+                "check_commands": list(checks_to_run),
                 "diff_hash": sha256_file(proposal / "proposal.diff"),
             }
         )
@@ -246,6 +286,13 @@ def seal(config: ProjectConfig, proposal_id: str, commands: tuple[str, ...] = ()
         manifest["review_hash"] = sha256_file(proposal / "review.md")
         manifest["digest"] = canonical_hash(_seal_payload(manifest))
         write_json(proposal / "manifest.json", manifest)
+        if feedback and feedback.get("status") == "open" and manifest["status"] == "ready":
+            feedback.update(
+                status="addressed",
+                addressed_at=utc_now(),
+                addressed_by_digest=manifest["digest"],
+            )
+            write_json(feedback_path, feedback)
         return manifest["digest"]
 
 
@@ -314,6 +361,70 @@ def review_material(config: ProjectConfig, proposal_id: str) -> dict:
             "report": (proposal / "review.md").read_text(encoding="utf-8"),
             "diff": (proposal / "proposal.diff").read_text(encoding="utf-8"),
         }
+
+
+def feedback_draft(config: ProjectConfig, proposal_id: str) -> Path:
+    proposal = _proposal_dir(config, proposal_id)
+    path = proposal / "feedback.draft.md"
+    if not path.exists():
+        path.write_text(
+            "# Requested changes\n\n"
+            "<!-- Describe concrete code, test, or experiment changes for the agent. -->\n",
+            encoding="utf-8",
+        )
+    return path
+
+
+def request_changes(
+    config: ProjectConfig,
+    proposal_id: str,
+    reviewed_digest: str,
+    reviewer: str,
+    feedback: str,
+) -> None:
+    reviewer = reviewer.strip()
+    feedback = feedback.strip()
+    if not reviewer:
+        raise SiftError("Reviewer name is required.")
+    meaningful = (
+        feedback.replace("# Requested changes", "")
+        .replace("<!-- Describe concrete code, test, or experiment changes for the agent. -->", "")
+        .strip()
+    )
+    if not meaningful:
+        raise SiftError("Write at least one requested change before sending feedback.")
+    with project_lock(config.state_dir):
+        proposal = _proposal_dir(config, proposal_id)
+        manifest = read_json(proposal / "manifest.json")
+        if manifest.get("status") != "ready":
+            raise SiftError("Only a ready proposal can receive review feedback.")
+        _validate_seal(config, proposal, manifest)
+        if manifest.get("digest") != reviewed_digest:
+            raise SiftError("The proposal changed during review.")
+        (proposal / "feedback.md").write_text(feedback.rstrip() + "\n", encoding="utf-8")
+        write_json(
+            proposal / "feedback.json",
+            {
+                "status": "open",
+                "reviewed_digest": reviewed_digest,
+                "candidate_hash": manifest["candidate_hash"],
+                "reviewer": reviewer,
+                "requested_at": utc_now(),
+            },
+        )
+        (proposal / "feedback.draft.md").unlink(missing_ok=True)
+        manifest["status"] = "changes_requested"
+        write_json(proposal / "manifest.json", manifest)
+
+
+def proposal_feedback(config: ProjectConfig, proposal_id: str) -> dict:
+    proposal = _proposal_dir(config, proposal_id)
+    record = read_json(proposal / "feedback.json")
+    return {
+        **record,
+        "feedback": (proposal / "feedback.md").read_text(encoding="utf-8"),
+        "candidate_path": str(proposal / "candidate"),
+    }
 
 
 def approve_reviewed(

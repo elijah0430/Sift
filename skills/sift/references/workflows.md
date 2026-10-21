@@ -27,16 +27,20 @@ into core when they will be maintained and reused across experiments.
 
 ## Prepare reusable code for review
 
-1. Run `sift promote prepare --title TITLE --rationale RATIONALE`.
+1. Run `sift propose --title TITLE --rationale RATIONALE`.
 2. Edit only the returned candidate directory.
 3. Add independent correctness tests and a bounded comparison against the reference behavior when
    both are applicable.
 4. Update callers to use the proposed public interface.
-5. Run `sift promote seal PROPOSAL_ID`. Supply additional `--check COMMAND` arguments when the
+5. Run `sift propose PROPOSAL_ID --ready`. Supply additional `--check COMMAND` arguments when the
    configured checks do not cover the relevant behavior.
-6. Inspect with `sift promote show PROPOSAL_ID` and report the exact diff and digest.
-7. Stop. Tell the human reviewer to run `sift review`. It lists pending changes when no proposal ID
-   is supplied and combines inspection, approval, and application in one terminal flow.
+6. Report the public interface, behavior changes, checks, relevant experiment comparisons, and
+   remaining uncertainty.
+7. Stop. Tell the human reviewer to run `sift review`. It opens the proposal in their configured
+   editor and returns to a human-controlled feedback or approval menu.
+
+If the reviewer requests changes, run `sift propose PROPOSAL_ID --feedback`, revise the candidate,
+and repeat steps 3–7.
 
 A code review should explain:
 
@@ -48,7 +52,7 @@ A code review should explain:
 
 ## Rerun an experiment and compare results
 
-Run `sift replay RUN_ID`. It uses the saved code and inputs, compares the new outputs with the
+Run `sift reproduce EXPERIMENT_OR_RUN`. It uses the saved code and inputs, compares the new outputs with the
 original results, and saves that comparison separately. Matching file hashes is meaningful for deterministic outputs.
 For stochastic experiments, preserve a comparison program or metrics with scientifically justified
 tolerances using `sift run --verify COMMAND`. The verifier receives original outputs through
@@ -73,9 +77,9 @@ accidental reuse. It does not change seeds or guarantee independent trials. Stor
 
 ## Archive and restore unused code
 
-Run `sift retire path scratch/NAME` after saving any experiment code and results that matter or
+Run `sift archive scratch/NAME` after saving any experiment code and results that matter or
 deciding they are not needed. Sift archives the target before removing it. Restore it with
-`sift retire restore RETIREMENT_ID`.
+`sift archive --restore ARCHIVE_ID`.
 
 Archiving code does not mean that the experiment failed. Keeping an experiment script does not mean
 that it belongs in core.

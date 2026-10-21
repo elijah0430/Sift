@@ -1,7 +1,7 @@
 interface:
   display_name: "Sift Research Code"
-  short_description: "Move research code safely from scratch to core"
-  default_prompt: "Use $sift to explore this research change in scratch and prepare any reusable code for human review before adding it to core."
+  short_description: "Separate explorations, experiments, and reviewed core code"
+  default_prompt: "Use $sift to explore this research change, preserve reproducible experiment code, and prepare reusable code for human review."
 
 policy:
   allow_implicit_invocation: true

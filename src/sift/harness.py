@@ -56,12 +56,16 @@ def guard(command: list[str]) -> dict:
     ):
         raise SiftError("This command is reserved for a human reviewer or is not an agent action.")
     allowed = {
+        "archive",
         "explore",
         "run",
         "check",
         "inspect",
         "preserve",
+        "propose",
+        "reproduce",
         "replay",
+        "status",
         "cache",
         "pin",
         "retire",

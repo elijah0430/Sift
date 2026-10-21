@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Explore in scratch. Keep reusable code in core.</strong><br>
+  <strong>Explore freely. Preserve experiments. Review shared code.</strong><br>
   A Python toolkit for organizing research code and reproducing experiments with coding agents.
 </p>
 
@@ -48,10 +48,22 @@ Initialize an existing project without moving its source:
 ~~~bash
 cd my-research-project
 sift init
-sift explore calibrated-scoring --question "Does calibration improve retrieval?"
+sift status
 ~~~
 
 Map existing directories in `research.toml`. You can keep your existing training framework and scripts.
+
+The researcher normally uses three commands:
+
+~~~bash
+sift status                       # What is active and what needs attention?
+sift review                       # Review a proposed change to maintained code
+sift reproduce EXPERIMENT_OR_RUN  # Rerun saved code and compare its outputs
+~~~
+
+The agent uses `explore`, `run`, `preserve`, `propose`, and `archive` while carrying out the
+research. Internal review hashes and transaction steps remain available through the lower-level
+commands, but they are not part of the normal researcher workflow.
 
 ### Try a complete, runnable example
 
@@ -72,31 +84,31 @@ directory:
 
 ~~~bash
 sift preserve baseline --name baseline-study --run RUN_ID
-sift retire path scratch/baseline
-sift replay RUN_ID
+sift archive scratch/baseline
+sift reproduce baseline-study
 ~~~
 
-`sift replay` reruns the experiment using its saved code and inputs, even after core changes.
+`sift reproduce` accepts either a preserved experiment name or a run ID. It uses saved code and
+inputs even after core changes.
 It compares the new outputs with the original results and saves the comparison separately.
 
 ### Move reusable code into core through code review
 
 ~~~bash
-sift promote prepare --title "Share the calibrated scorer" --rationale "Two experiments use this scoring function"
+sift propose --title "Share the calibrated scorer" --rationale "Two experiments use this scoring function"
 ~~~
 
-Edit the separate working copy created by this command. Extract the reusable function or module,
-update the experiment scripts that call it, and test its expected behavior. Where relevant, compare
-its outputs with the original implementation to check that refactoring preserves the results.
+Sift prints a separate review workspace. When Git is installed, that workspace is a local repository
+whose initial commit is the proposal baseline. The agent edits it while the original maintained code
+remains unchanged. Editor Source Control views then show the proposed files as ordinary uncommitted
+changes.
 
 ~~~bash
-sift promote seal PROPOSAL_ID
-sift promote show PROPOSAL_ID
+sift propose PROPOSAL_ID --ready
 ~~~
 
-`sift promote seal` runs the import dependency checks and your configured tests, then saves a fixed
-version of the proposed changes for review. Additional `--check` commands supplement those checks.
-The review includes the code diff, test results, and a checksum identifying that version.
+This runs the import rules and configured tests, saves an exact review version, and tells the
+researcher that `sift review` is ready.
 
 A researcher reviews the changes in one terminal flow:
 
@@ -104,20 +116,27 @@ A researcher reviews the changes in one terminal flow:
 sift review
 ~~~
 
-If several changes are waiting, Sift asks which one to review. It shows the explanation, changed
-files, test results, and diff, then offers familiar actions:
+If an editor command is configured, Sift opens the review workspace in the researcher’s normal code
+review interface. For example:
 
-~~~text
-[d] diff  [t] test output  [e] editor  [a] approve and apply  [l] later
+~~~toml
+[review]
+command = "code --wait"
 ~~~
 
-The approval uses your OS username, shown before the diff; use `sift review --reviewer NAME` to
-change it. Choosing `a` approves and applies without another prompt. Press Enter to leave it pending.
+The editor provides the changed-file list, side-by-side diffs, project navigation, and direct
+editing. After it closes, Sift offers:
 
-The editor comes from `VISUAL` or `EDITOR`, or from `sift review --editor COMMAND`. Use a command that
-waits until editing finishes, such as `sift review --editor "code --wait"`. If an edit changes the
-proposed code, Sift requires checks and a fresh review before approval. The lower-level
-`sift promote approve` and `sift promote apply` commands remain available for explicit workflows.
+~~~text
+[o] open code review  [d] terminal diff  [c] checks
+[f] request changes   [a] approve and apply  [l] later
+~~~
+
+The editor command can also come from `VISUAL`, `EDITOR`, or `--editor`. Use `--terminal` to stay in
+the pager. If the researcher edits the candidate, Sift can rerun the same checks and display the new
+diff before enabling approval. Requesting changes saves concrete feedback with the proposal; the
+agent reads it with `sift propose PROPOSAL_ID --feedback`, revises the candidate, and marks it ready
+again.
 
 **Passing tests does not grant approval.** Approval applies only to the reviewed version. Changes to
 the proposed code, diff, or test report require running `seal` again and obtaining new approval.
@@ -169,13 +188,13 @@ no runs, cache entries, or pins still reference it.
 ### Archive unused code and clean up old files
 
 ~~~bash
-sift retire path scratch/old-idea
-sift retire restore RETIREMENT_ID
+sift archive scratch/old-idea
+sift archive --restore ARCHIVE_ID
 sift pin RUN_ID
 sift gc plan
 ~~~
 
-`sift retire` checks whether maintained code or active runs depend on the directory, verifies an
+`sift archive` checks whether maintained code or active runs depend on the directory, verifies an
 archive copy, then removes the directory from the working project. `restore` checks the archive
 before copying it back. Cleanup considers file age and references from saved experiments, related
 runs, rerun comparisons, pending code changes, cache entries, and pinned items.
@@ -204,7 +223,7 @@ and can launch an agent in a separate working copy:
 
 ~~~bash
 sift harness policy
-sift harness guard -- sift promote prepare --title "Shared evaluation function"
+sift harness guard -- sift propose --title "Shared evaluation function"
 sift harness launch -- your-coding-agent
 ~~~
 
@@ -233,11 +252,11 @@ provide replaceable experimental components; adopting Hamilton or another graph 
 
 | Task | Commands |
 |---|---|
-| Start and run | `init` · `explore` · `run` |
-| Understand and validate | `inspect` · `check` · `doctor` |
-| Preserve and reproduce | `preserve` · `replay` · `export` |
-| Maintain core | `promote prepare` · `seal` · `show` · `review` |
-| Store and retire | `artifact` · `cache` · `pin` · `retire` · `gc` |
+| Researcher | `status` · `review` · `reproduce` |
+| Agent research lifecycle | `explore` · `run` · `preserve` · `propose` · `archive` |
+| Inspect and validate | `inspect` · `check` · `doctor` · `export` |
+| Store results | `artifact` · `cache` · `pin` · `gc` |
+| Low-level promotion and recovery | `promote` · `replay` · `retire` |
 | Connect an agent | `skill` · `harness` |
 
 Use `sift --json COMMAND` for structured output. `sift review` is interactive and keeps the code

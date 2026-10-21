@@ -7,6 +7,7 @@ import pytest
 
 from sift.cli import _guard, _policy, _skill_source
 from sift.errors import SiftError
+from sift.harness import guard
 
 
 def test_agent_policy_reserves_approval_and_apply():
@@ -21,6 +22,16 @@ def test_guard_rejects_human_only_command():
         _guard(["sift", "promote", "approve", "proposal-1"])
     with pytest.raises(SiftError, match="human"):
         _guard(["sift", "review", "proposal-1"])
+
+
+def test_guard_allows_research_lifecycle_commands():
+    for command in (
+        ["sift", "status"],
+        ["sift", "propose", "--title", "Shared loader"],
+        ["sift", "reproduce", "baseline-study"],
+        ["sift", "archive", "scratch/old-idea"],
+    ):
+        assert guard(command)["allowed"] is True
 
 
 def test_skill_is_packaged_or_available_from_checkout():

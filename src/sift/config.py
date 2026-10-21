@@ -30,6 +30,9 @@ state = ".research"
 [checks]
 commands = ["python -m pytest"]
 
+[review]
+# command = "code --wait"
+
 [retention]
 archive_days = 90
 """
@@ -50,6 +53,7 @@ class ProjectConfig:
     independent: tuple[str, ...] = ()
     acyclic: bool = True
     boundary_engine: str = "builtin"
+    review_command: str | None = None
 
     @classmethod
     def load(cls, root: Path) -> ProjectConfig:
@@ -77,6 +81,7 @@ class ProjectConfig:
                 independent=tuple(data.get("boundaries", {}).get("independent", [])),
                 acyclic=bool(data.get("boundaries", {}).get("acyclic", True)),
                 boundary_engine=data.get("boundaries", {}).get("engine", "builtin"),
+                review_command=data.get("review", {}).get("command"),
             )
             configured = [
                 *config.core,
@@ -97,6 +102,8 @@ class ProjectConfig:
                 raise SiftError("archive_days must be nonnegative.")
             if config.boundary_engine not in {"builtin", "import-linter", "tach"}:
                 raise SiftError("Boundary engine must be builtin, import-linter, or tach.")
+            if config.review_command is not None and not isinstance(config.review_command, str):
+                raise SiftError("Review command must be a string.")
             return config
         except (TypeError, ValueError) as exc:
             raise SiftError(f"Invalid configuration in {path}: {exc}") from exc

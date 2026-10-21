@@ -16,8 +16,8 @@ Use the first printed run ID to keep the baseline script and link it to that run
 
 ~~~bash
 sift preserve baseline --name baseline-study --run RUN_ID
-sift retire path scratch/baseline
-sift replay RUN_ID
+sift archive scratch/baseline
+sift reproduce baseline-study
 ~~~
 
 You can rerun the baseline and check its results after archiving its scratch directory.
@@ -25,7 +25,7 @@ You can rerun the baseline and check its results after archiving its scratch dir
 To move a shared metric into core, prepare a separate working copy:
 
 ~~~bash
-sift promote prepare --title "Share clipped mean absolute error" --rationale "Two studies need the metric"
+sift propose --title "Share clipped mean absolute error" --rationale "Two studies need the metric"
 ~~~
 
 Inside the printed candidate directory, extract the metric into core, add known-value and edge-case
@@ -33,8 +33,7 @@ tests, update callers, and run the core tests without scratch on the import path
 project, run the checks and save the proposed changes for review:
 
 ~~~bash
-sift promote seal PROPOSAL_ID
-sift promote show PROPOSAL_ID
+sift propose PROPOSAL_ID --ready
 ~~~
 
 Review the code diff, API, assumptions, and test results. A human then runs:
@@ -43,5 +42,6 @@ Review the code diff, API, assumptions, and test results. A human then runs:
 sift review PROPOSAL_ID
 ~~~
 
-Choose `a` to approve and apply the displayed change. Passing tests do not grant approval. Replaying
+Review the change in the configured editor or terminal diff. Choose `a` to approve and apply it, or
+`f` to send concrete requested changes back to the agent. Passing tests do not grant approval. Reproducing
 the original run still uses its saved original core.

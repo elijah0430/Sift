@@ -43,11 +43,16 @@ Only a human-controlled terminal or trusted host review UI may approve and apply
 The skill never runs `review`, `promote approve`, `promote apply`, or `gc apply`. A terminal flag is
 not proof of human identity against an unrestricted process; actual authority is supplied by the host.
 
-`sift review` lists pending core changes and displays the report and diff before offering interactive
-actions. Approval and application happen together only after the reviewer chooses that action. If
-the reviewer edits the working copy, the proposal must be checked and prepared for review again.
+`sift review` lists pending core changes, opens the candidate in the configured editor, and returns
+to a human-controlled approval menu. The candidate is a local Git repository when Git is available,
+so normal editor Source Control views show the proposal. If the reviewer edits it, Sift reruns the
+configured checks and displays the refreshed diff before approval.
 
-`sift promote seal` saves a fixed version of the proposed code, diff, check results, and original
-project state for review, identified by a checksum. Editing reviewed content requires running `seal`
-again and obtaining new approval. Sift validates that version again before applying the changes.
+Requesting changes removes the proposal from the human review queue. The agent reads the feedback
+with `sift propose PROPOSAL_ID --feedback`, revises the candidate, and runs
+`sift propose PROPOSAL_ID --ready`.
+
+`sift propose PROPOSAL_ID --ready` saves an exact version of the proposed code, diff, check results,
+and original project state. Editing reviewed content requires running the checks again and obtaining
+new approval. Sift validates that version again before applying the changes.
 

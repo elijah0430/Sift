@@ -13,8 +13,9 @@ across experiments; **experiments** contains scripts and configurations worth ke
 contains exploratory code. The separation of exploratory notebooks and reusable source code also
 appears in [Cookiecutter Data Science](https://cookiecutter-data-science.drivendata.org/).
 
-The commands `preserve`, `promote`, `replay`, and `retire` respectively save an experiment's code,
-prepare reusable code for review and inclusion in core, rerun an experiment, and archive unused code.
+The commands `preserve`, `propose`, `reproduce`, and `archive` respectively save an experiment's
+code, prepare reusable code for review, rerun an experiment, and archive unused code. The older
+`promote`, `replay`, and `retire` commands remain as lower-level interfaces.
 
 ## Configuration
 
@@ -37,6 +38,9 @@ acyclic = true
 
 [snapshot]
 ignore = ["datasets", "outputs"]
+
+[review]
+command = "code --wait"
 
 [retention]
 archive_days = 90
@@ -65,18 +69,24 @@ rules always run. The example includes working native configurations for both to
 
 ## Reviewing and applying core changes
 
-1. Prepare baseline and candidate source copies, including relevant uncommitted source.
+1. Prepare baseline and candidate source copies, including relevant uncommitted source. When Git is
+   available, initialize the candidate as a local repository with the baseline as its first commit.
 2. Edit only the candidate.
 3. Revoke prior approval before checking. Run mandatory import checks, configured checks, and extra checks.
 4. Reject source changes made by the checks. Freeze candidate bytes separately and record hashes.
 5. Bind the diff, changed-file list, reference snapshot, protected project state, candidate, rationale,
    and check report to one digest.
-6. `sift review` shows the report and diff in a human-controlled terminal. The reviewer can inspect
-   test output, open the working copy in an editor, approve and apply, or leave the change pending.
+6. `sift review` shows the purpose, changed files, and validation status in a human-controlled
+   terminal. It opens the candidate in the configured editor, where ordinary Source Control tools
+   provide file navigation and side-by-side diffs. A terminal diff remains available.
 7. Approval records the digest of the version displayed in that review session. Revalidate the saved
    review version and original project before application. Journal application and write files
    through atomic replacements. Resume interrupted application only if affected files still match
    their recorded before/after content.
+
+The reviewer can save requested changes with the reviewed digest. This removes the proposal from the
+human review queue until the agent changes the candidate and reruns its checks. The feedback remains
+available to the agent through `sift propose PROPOSAL_ID --feedback`.
 
 Editing the working copy invalidates the saved review and requires the checks to run again. The
 reviewer does not need to copy a checksum manually; Sift carries the displayed digest into approval
@@ -106,7 +116,8 @@ reconstructs a project lock; commands should select Python through that managed 
 Containers and GPU drivers remain execution prerequisites. `--launcher` supplies an existing scheduler
 prefix for a shared filesystem, not a scheduler or transfer service.
 
-`sift replay` validates the saved code and inputs, starts a new execution without previous output
+`sift reproduce` resolves either a preserved experiment name or a run ID, validates the saved code
+and inputs, and starts a new execution without previous output
 files, and saves the new environment information and output comparison. The original run metadata
 stays unchanged. `sift inspect runs ID` combines it with the rerun comparisons.
 

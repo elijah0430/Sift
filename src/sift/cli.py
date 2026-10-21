@@ -6,7 +6,6 @@ import getpass
 import io
 import json
 import os
-import pydoc
 import shlex
 import shutil
 import subprocess
@@ -32,14 +31,18 @@ from .promotion import apply as apply_promotion
 from .promotion import (
     approve,
     approve_reviewed,
+    feedback_draft,
     pending_proposals,
     prepare,
+    proposal_feedback,
     proposal_summary,
+    request_changes,
     review_material,
     seal,
 )
 from .snapshots import create_run, load_run, replay_run
 from .util import find_project, read_json, safe_id
+from .workspace import resolve_run, workspace_status
 
 
 def _config() -> ProjectConfig:
@@ -55,7 +58,20 @@ def _result(args, value: dict, message: str) -> None:
 
 
 def _page(text: str) -> None:
-    pydoc.pager(text.rstrip() + "\n")
+    content = text.rstrip() + "\n"
+    command = os.environ.get("PAGER")
+    if command:
+        argv = shlex.split(command, posix=os.name != "nt")
+        if os.name == "nt":
+            argv = [part.strip("\"'") for part in argv]
+    else:
+        executable = "more.com" if os.name == "nt" else "less"
+        argv = [executable]
+    if sys.stdout.isatty() and argv and shutil.which(argv[0]):
+        completed = subprocess.run(argv, input=content, text=True, check=False)
+        if completed.returncode == 0:
+            return
+    print(content, end="")
 
 
 def _open_editor(path: Path, editor: str | None = None) -> None:
@@ -112,11 +128,131 @@ def _format_checks(material: dict) -> str:
     return "\n\n".join(sections) or "No checks were recorded."
 
 
+def _print_workspace_status(status: dict) -> None:
+    runs = status["runs"]
+    print("Research workspace")
+    print(f"  {status['root']}\n")
+    print("Needs your attention")
+    print(f"  Core changes needing review    {status['needs_review']}")
+    print(f"  Changes requested              {status['changes_requested']}\n")
+    print("Current work")
+    print(f"  Active explorations            {len(status['explorations'])}")
+    print(f"  Draft core changes             {status['draft_proposals']}")
+    print(f"  Running experiments            {runs['active']}\n")
+    print("Preserved research")
+    print(f"  Experiments                    {len(status['experiments'])}")
+    print(f"  Experiment runs                {runs['total']}")
+    if runs["failed"] or runs["interrupted"]:
+        print(f"  Failed or interrupted          {runs['failed'] + runs['interrupted']}")
+
+
+def _editor_command(config: ProjectConfig, editor: str | None) -> str | None:
+    return editor or config.review_command or os.environ.get("VISUAL") or os.environ.get("EDITOR")
+
+
+def _review_header(material: dict, selected: str, reviewer: str) -> None:
+    passed = sum(item["exit_code"] == 0 for item in material["checks"])
+    print(f"\n{material['title']}")
+    if material.get("rationale"):
+        print(f"\nPurpose\n  {material['rationale']}")
+    print("\nChanged files")
+    action_labels = {"add": "added", "modify": "modified", "delete": "deleted"}
+    for change in material["changes"]:
+        print(f"  {action_labels.get(change['action'], change['action'])}: {change['path']}")
+    print(f"\nValidation\n  {passed}/{len(material['checks'])} checks passed")
+    print(f"\nReview workspace\n  {material['candidate_path']}")
+    print(f"\nReview ID: {selected}")
+    if not material["approved"]:
+        print(f"Reviewer: {reviewer}")
+
+
+def _reseal_after_edit(config: ProjectConfig, selected: str, material: dict) -> dict | None:
+    while True:
+        try:
+            action = (
+                input(
+                    "\nThe review workspace changed.\n"
+                    "[r] rerun checks and refresh review  [l] leave for the agent\n> "
+                )
+                .strip()
+                .lower()
+            )
+        except (EOFError, KeyboardInterrupt):
+            action = "l"
+        if action in {"l", "q", ""}:
+            print(f"Left {selected} pending. The candidate must be checked again before approval.")
+            return None
+        if action != "r":
+            print("Choose r or l.")
+            continue
+        seal(config, selected, tuple(material.get("check_commands", ())))
+        summary = proposal_summary(config, selected)
+        if summary["status"] != "ready":
+            _page(_format_checks(summary))
+            print("Checks failed. The proposal remains with the agent for revision.")
+            return None
+        refreshed = review_material(config, selected)
+        print("Checks passed. Review the updated change before approval.")
+        _page(f"{refreshed['report']}\n\n{refreshed['diff']}")
+        return refreshed
+
+
+def _open_review_workspace(
+    config: ProjectConfig,
+    selected: str,
+    material: dict,
+    command: str | None,
+) -> dict | None:
+    try:
+        _open_editor(Path(material["candidate_path"]), command)
+    except (SiftError, OSError, ValueError) as exc:
+        print(f"Could not open review workspace: {exc}")
+        return material
+    try:
+        refreshed = review_material(config, selected)
+    except SiftError:
+        return _reseal_after_edit(config, selected, material)
+    if refreshed["digest"] != material["digest"]:
+        print(f"The proposal changed during review. Run sift review {selected} again.")
+        return None
+    return refreshed
+
+
+def _collect_feedback(
+    config: ProjectConfig,
+    selected: str,
+    material: dict,
+    reviewer: str,
+    command: str | None,
+) -> bool:
+    draft = feedback_draft(config, selected)
+    if command:
+        try:
+            _open_editor(draft, command)
+        except (SiftError, OSError, ValueError) as exc:
+            print(f"Could not open feedback note: {exc}")
+            return False
+        feedback = draft.read_text(encoding="utf-8")
+    else:
+        try:
+            feedback = input("Requested changes: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return False
+    try:
+        request_changes(config, selected, material["digest"], reviewer, feedback)
+    except SiftError as exc:
+        print(f"Feedback was not saved: {exc}")
+        return False
+    print(f"Requested changes saved for {selected}.")
+    return True
+
+
 def _review(
     config: ProjectConfig,
     proposal_id: str | None,
     editor: str | None,
     reviewer: str | None = None,
+    terminal: bool = False,
 ) -> int:
     if not sys.stdin.isatty():
         raise SiftError("Review requires an interactive human terminal.")
@@ -127,23 +263,24 @@ def _review(
     reviewer = (reviewer if reviewer is not None else getpass.getuser()).strip()
     if not reviewer:
         raise SiftError("Reviewer name is required; use sift review --reviewer NAME.")
-    passed = sum(item["exit_code"] == 0 for item in material["checks"])
-    print(f"\n{material['title']}")
-    print(f"Proposal: {selected}")
-    if material.get("rationale"):
-        print(f"Why: {material['rationale']}")
-    print(f"Changes: {len(material['changes'])} files")
-    print(f"Checks: {passed}/{len(material['checks'])} passed")
-    print("Status: approved" if material["approved"] else "Status: ready for review")
-    if not material["approved"]:
-        print(f"Reviewer: {reviewer}")
-    _page(f"{material['report']}\n\n{material['diff']}")
+    command = _editor_command(config, editor)
+    _review_header(material, selected, reviewer)
+    if command and not terminal:
+        print("\nOpening the code review in your editor...")
+        material = _open_review_workspace(config, selected, material, command)
+        if material is None:
+            return 0
+    else:
+        _page(f"{material['report']}\n\n{material['diff']}")
 
     while True:
         action_label = "apply" if material["approved"] else "approve and apply"
         try:
             action = (
-                input(f"\n[d] diff  [t] test output  [e] editor  [a] {action_label}  [l] later\n> ")
+                input(
+                    f"\n[o] open code review  [d] terminal diff  [c] checks\n"
+                    f"[f] request changes   [a] {action_label}  [l] later\n> "
+                )
                 .strip()
                 .lower()
             )
@@ -152,21 +289,14 @@ def _review(
             return 0
         if action == "d":
             _page(material["diff"])
-        elif action == "t":
+        elif action in {"c", "t"}:
             _page(_format_checks(material))
-        elif action == "e":
-            try:
-                _open_editor(Path(material["candidate_path"]), editor)
-            except (SiftError, OSError, ValueError) as exc:
-                print(f"Could not open editor: {exc}")
-                continue
-            try:
-                refreshed = review_material(config, selected)
-            except SiftError:
-                print(f"Working copy changed. Ask the agent to run: sift promote seal {selected}")
+        elif action in {"o", "e"}:
+            material = _open_review_workspace(config, selected, material, command)
+            if material is None:
                 return 0
-            if refreshed["digest"] != material["digest"]:
-                print(f"The proposal changed during review. Run sift review {selected} again.")
+        elif action == "f":
+            if _collect_feedback(config, selected, material, reviewer, command):
                 return 0
         elif action == "a":
             if not material["approved"]:
@@ -178,21 +308,27 @@ def _review(
             print(f"Left {selected} pending.")
             return 0
         else:
-            print("Choose d, t, e, a, or l.")
+            print("Choose o, d, c, f, a, or l.")
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sift",
-        description="Organize research code, track experiment runs, and reproduce results.",
+        description=(
+            "Move research code from exploration to reproducible experiments and reviewed core."
+        ),
     )
-    parser.add_argument("--version", action="version", version="sift 0.2.1")
+    parser.add_argument("--version", action="version", version="sift 0.3.0")
     parser.add_argument("--json", dest="json_output", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
 
     init = sub.add_parser("init", help="Initialize Sift in an existing project")
     init.add_argument("path", nargs="?", default=".")
     init.add_argument("--package")
+
+    sub.add_parser(
+        "status", help="Show explorations, experiments, runs, and changes needing review"
+    )
 
     explore = sub.add_parser("explore", help="Create a scratch directory for exploratory code")
     explore.add_argument("name")
@@ -246,10 +382,13 @@ def _parser() -> argparse.ArgumentParser:
     preserve_parser.add_argument("--name")
     preserve_parser.add_argument("--run", dest="run_id")
 
-    replay = sub.add_parser(
-        "replay", help="Rerun an experiment with saved code and inputs; compare outputs"
-    )
+    replay = sub.add_parser("replay", help="Low-level reproduction command using a run ID")
     replay.add_argument("run_id")
+
+    reproduce = sub.add_parser(
+        "reproduce", help="Rerun a preserved experiment or run and compare its outputs"
+    )
+    reproduce.add_argument("experiment_or_run")
 
     cache = sub.add_parser("cache", help="Cache intermediate results for reuse")
     cache_sub = cache.add_subparsers(dest="cache_command", required=True)
@@ -285,7 +424,7 @@ def _parser() -> argparse.ArgumentParser:
     gc_apply = gc_sub.add_parser("apply", help="Interactively apply an unchanged cleanup plan")
     gc_apply.add_argument("plan_id")
 
-    promote = sub.add_parser("promote", help="Move reusable code into core through human review")
+    promote = sub.add_parser("promote", help="Low-level core-change transaction commands")
     promote_sub = promote.add_subparsers(dest="promote_command", required=True)
     promote_prepare = promote_sub.add_parser(
         "prepare", help="Create a separate working copy for proposed core changes"
@@ -309,6 +448,17 @@ def _parser() -> argparse.ArgumentParser:
     promote_apply = promote_sub.add_parser("apply", help="Apply a human-approved patch")
     promote_apply.add_argument("proposal_id")
 
+    propose = sub.add_parser(
+        "propose", help="Prepare reusable code for review without changing maintained code"
+    )
+    propose.add_argument("proposal_id", nargs="?")
+    propose.add_argument("--title", help="Short description for a new core change")
+    propose.add_argument("--rationale", default="", help="Why the code should be maintained")
+    propose.add_argument("--baseline-run")
+    propose.add_argument("--ready", action="store_true", help="Run checks and mark it ready")
+    propose.add_argument("--check", action="append", default=[])
+    propose.add_argument("--feedback", action="store_true", help="Show requested changes")
+
     review = sub.add_parser(
         "review",
         help="Review pending core changes and optionally approve and apply them",
@@ -319,13 +469,20 @@ def _parser() -> argparse.ArgumentParser:
     review.add_argument(
         "--reviewer", help="Name stored with approval; defaults to your OS username"
     )
+    review.add_argument(
+        "--terminal", action="store_true", help="Use the terminal diff instead of opening an editor"
+    )
 
-    retire_parser = sub.add_parser("retire", help="Archive then remove scratch or an experiment")
+    retire_parser = sub.add_parser("retire", help="Low-level archive and restore commands")
     retire_sub = retire_parser.add_subparsers(dest="retire_command", required=True)
     retire_path = retire_sub.add_parser("path", help="Archive and remove a project directory")
     retire_path.add_argument("relative_path")
     retire_restore = retire_sub.add_parser("restore", help="Restore an archived directory")
     retire_restore.add_argument("retirement_id")
+
+    archive = sub.add_parser("archive", help="Archive unused scratch or experiment code")
+    archive.add_argument("path", nargs="?")
+    archive.add_argument("--restore", metavar="ARCHIVE_ID")
 
     harness = sub.add_parser(
         "harness", help="Configure agent command checks and allowed write paths"
@@ -484,8 +641,14 @@ def execute(args: argparse.Namespace) -> int:
     ):
         raise SiftError("Approval and application belong to the human-controlled host.")
     if args.command == "review":
-        return _review(config, args.proposal_id, args.editor, args.reviewer)
-    if args.command == "explore":
+        return _review(config, args.proposal_id, args.editor, args.reviewer, args.terminal)
+    if args.command == "status":
+        status = workspace_status(config)
+        if args.json_output:
+            _json(status)
+        else:
+            _print_workspace_status(status)
+    elif args.command == "explore":
         path = create_exploration(config, args.name, args.question, args.from_run, args.notebook)
         _result(args, {"path": str(path)}, str(path))
     elif args.command == "run":
@@ -537,6 +700,20 @@ def execute(args: argparse.Namespace) -> int:
             args,
             {"id": replay_id, "exit_code": exit_code, "accepted": matches},
             f"{replay_id} (exit {exit_code}, accepted={str(matches).lower()})",
+        )
+        return 0 if matches else 1
+    elif args.command == "reproduce":
+        run_id = resolve_run(config, args.experiment_or_run)
+        replay_id, exit_code, matches = replay_run(config, run_id)
+        _result(
+            args,
+            {
+                "id": replay_id,
+                "run_id": run_id,
+                "exit_code": exit_code,
+                "accepted": matches,
+            },
+            f"{replay_id} reproduced {run_id} (accepted={str(matches).lower()})",
         )
         return 0 if matches else 1
     elif args.command == "cache":
@@ -612,12 +789,67 @@ def execute(args: argparse.Namespace) -> int:
         elif args.promote_command == "apply":
             apply_promotion(config, args.proposal_id)
             print(f"Applied {args.proposal_id}")
+    elif args.command == "propose":
+        if args.title and not args.proposal_id and not args.ready and not args.feedback:
+            proposal_id, candidate = prepare(config, args.title, args.rationale, args.baseline_run)
+            _result(
+                args,
+                {"id": proposal_id, "candidate": str(candidate), "status": "draft"},
+                f"{proposal_id}\nEdit candidate: {candidate}",
+            )
+        elif args.proposal_id and args.ready and not args.title and not args.feedback:
+            digest = seal(config, args.proposal_id, tuple(args.check))
+            summary = proposal_summary(config, args.proposal_id)
+            ready = summary["status"] == "ready"
+            _result(
+                args,
+                {
+                    "id": args.proposal_id,
+                    "status": summary["status"],
+                    "digest": digest,
+                    "next": (
+                        "Ask the researcher to run sift review"
+                        if ready
+                        else "Fix the failing checks and mark the proposal ready again"
+                    ),
+                },
+                (
+                    f"{summary['status']}: {args.proposal_id}\n"
+                    + (
+                        "The researcher can now run: sift review"
+                        if ready
+                        else "Fix the failing checks before requesting review."
+                    )
+                ),
+            )
+            return 0 if ready else 1
+        elif args.proposal_id and args.feedback and not args.title and not args.ready:
+            feedback = proposal_feedback(config, args.proposal_id)
+            if args.json_output:
+                _json(feedback)
+            else:
+                print(feedback["feedback"].rstrip())
+                print(f"\nEdit candidate: {feedback['candidate_path']}")
+        elif args.proposal_id and not args.title and not args.ready and not args.feedback:
+            _json(proposal_summary(config, args.proposal_id))
+        else:
+            raise SiftError(
+                "Start with --title, or provide a proposal ID with --ready or --feedback."
+            )
     elif args.command == "retire":
         if args.retire_command == "path":
             retirement_id = retire(config, args.relative_path)
             _result(args, {"id": retirement_id, "recoverable": True}, retirement_id)
         else:
             print(restore_retirement(config, args.retirement_id))
+    elif args.command == "archive":
+        if args.restore and not args.path:
+            print(restore_retirement(config, args.restore))
+        elif args.path and not args.restore:
+            retirement_id = retire(config, args.path)
+            _result(args, {"id": retirement_id, "recoverable": True}, retirement_id)
+        else:
+            raise SiftError("Provide a path to archive or use --restore ARCHIVE_ID.")
     elif args.command == "doctor":
         result = doctor(config, args.recover)
         if args.reindex:

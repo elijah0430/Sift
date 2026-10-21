@@ -3,8 +3,15 @@
 from .adapters import ArtifactRef, ArtifactStore, CommandArtifactStore, LocalArtifactStore
 from .config import ProjectConfig, initialize_project
 from .lifecycle import create_exploration, preserve, restore_retirement, retire
-from .promotion import prepare, proposal_summary, seal
+from .promotion import (
+    prepare,
+    proposal_feedback,
+    proposal_summary,
+    request_changes,
+    seal,
+)
 from .snapshots import create_run, load_run, replay_run
+from .workspace import resolve_run, workspace_status
 
 __all__ = [
     "ArtifactRef",
@@ -18,9 +25,13 @@ __all__ = [
     "load_run",
     "prepare",
     "preserve",
+    "proposal_feedback",
     "proposal_summary",
     "replay_run",
+    "request_changes",
+    "resolve_run",
     "restore_retirement",
     "retire",
     "seal",
+    "workspace_status",
 ]

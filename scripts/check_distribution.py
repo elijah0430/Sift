@@ -51,9 +51,12 @@ def main():
             return result.stdout
 
         assert f"sift {version}" in run("--version")
-        assert "review" in run("--help")
+        help_text = run("--help")
+        for command in ("status", "review", "reproduce", "propose", "archive"):
+            assert command in help_text
         assert "--editor" in run("review", "--help")
         assert "--reviewer" in run("review", "--help")
+        assert "--terminal" in run("review", "--help")
         run("skill", "install", "--target", str(temporary / "skills"))
         assert (temporary / "skills/sift/SKILL.md").is_file()
         assert json.loads(run("harness", "policy"))["actor"] == "agent"
@@ -68,6 +71,15 @@ def main():
             check=True,
         )
         assert json.loads(result.stdout)["result"]["path"]
+        status = subprocess.run(
+            [str(python), "-I", "-m", "sift", "--json", "status"],
+            cwd=project,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        assert json.loads(status.stdout)["result"]["explorations"] == ["wheel-test"]
     print("Wheel install, isolated import, CLI, bundled skill, and harness passed.")
 
 

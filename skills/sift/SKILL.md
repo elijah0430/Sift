@@ -14,7 +14,7 @@ Use Sift to keep exploratory work fast while protecting maintained code.
 - To keep an experiment's code, use `sift preserve SCRATCH_NAME --run RUN_ID` to copy the version used
   for that run. Without a run ID, this saves the current code without checking reproducibility.
 - When functions or modules should be shared across experiments, prepare a core change for review.
-- When scratch or experiment code is no longer needed, archive it with `sift retire`.
+- When scratch or experiment code is no longer needed, archive it with `sift archive`.
 - Use cache reuse only when code, inputs, configuration, and randomness belong to the cache key. Use
   `--fresh` to create a new key when reuse is inappropriate. This does not change random seeds.
 
@@ -30,15 +30,19 @@ the original core; only a configured OS/host sandbox prevents arbitrary writes.
 
 During ordinary exploration, write only inside the relevant scratch directory. Core may be read and imported.
 
-To move reusable code into core, run `sift promote prepare`, edit only the separate working copy it
-creates, then run `sift promote seal`. This checks and saves a fixed version for review. Present the
-reason for the change, public API, test results, behavior changes, remaining uncertainty, diff path,
-and version checksum to the user.
+To move reusable code into core, run `sift propose --title TITLE --rationale RATIONALE`, edit only the
+separate review workspace it creates, then run `sift propose PROPOSAL_ID --ready`. This checks and
+saves an exact version for review. Present the reason for the change, public API, test results,
+behavior changes, and remaining uncertainty to the user.
+
+Before revising a proposal returned by the reviewer, run
+`sift propose PROPOSAL_ID --feedback`. Address the concrete requests in the candidate, rerun the
+relevant software and experiment checks, and mark the proposal ready again.
 
 Never run `sift review`, `sift promote approve`, or `sift promote apply`. Tell the user that the core
-change is ready and ask them to run `sift review` in their terminal. That flow shows the report, diff,
-and test output and can approve and apply the exact reviewed version. If the proposed code changes,
-run `seal` again and request a new review.
+change is ready and ask them to run `sift review` in their terminal. That flow opens the proposal in
+their configured editor, shows the checks, and can approve and apply the exact reviewed version. If
+the proposed code changes, run `sift propose PROPOSAL_ID --ready` again and request a new review.
 
 You may prepare a cleanup plan with `sift gc plan`. Never run `sift gc apply`; show its targets and
 digest to the user for human review. Pin any run or archive that must survive retention cleanup.
