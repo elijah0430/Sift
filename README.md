@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>Explore freely. Preserve experiments. Review shared code.</strong><br>
-  A Python toolkit for organizing research code and reproducing experiments with coding agents.
+  A Python toolkit for organizing research code written with coding agents.
 </p>
 
 <p align="center">
@@ -13,123 +13,98 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-06b6d4" alt="MIT"></a>
 </p>
 
-Research code grows through preliminary analyses, new methods, additional datasets and models, and
-ablations. When every iteration modifies the same code, the project becomes difficult to understand,
-reproduce, and extend.
+<p align="center">
+  <a href="examples/minimal/README.md">Runnable example</a> ·
+  <a href="docs/review.md">Review workflow</a> ·
+  <a href="docs/agents.md">Agent setup</a> ·
+  <a href="docs/related-tools.md">Related tools</a>
+</p>
 
-Sift gives exploratory and maintained code different workflows. An agent can try ideas freely, save
-the exact code and inputs used for an experiment, and prepare reusable code as a proposal. The
-project's maintained code changes only after human review.
+Coding agents make rapid research iteration easier, but repeated edits can mix preliminary analyses,
+experiment-specific scripts, and reusable code into one difficult codebase. Sift gives each kind of
+code a separate path:
+
+- **Explore** uncertain ideas in scratch without modifying maintained code.
+- **Run** experiments from saved source and input snapshots and keep their outputs and logs.
+- **Preserve** the exact experiment code needed to reproduce an important result.
+- **Review** reusable code before it enters the maintained project.
+
+Sift works inside an existing Python repository. It does not replace the project's training
+framework, configuration system, scheduler, or experiment tracker.
 
 ![Sift workflow: exploratory code, experiment runs, code review, reusable modules, and archived code.](assets/workflow.svg)
 
-## Three places for research code
-
-| Place | What belongs there |
-|---|---|
-| **Scratch** | Preliminary analyses, debugging, notebooks, and uncertain ideas |
-| **Experiments** | Scripts and configurations needed to reproduce a result |
-| **Core** | Tested modules maintained and reused across experiments |
-
-Experiment code does not need to become core. A script can be worth preserving because it produced
-a reported result even when no other experiment will reuse it.
-
-## Install
+## Quick start
 
 ```bash
 uv tool install git+https://github.com/elijah0430/Sift.git
 # Or: pip install git+https://github.com/elijah0430/Sift.git
-```
 
-Initialize Sift inside an existing research project:
-
-```bash
 cd my-research-project
 sift init
-sift status
 ```
 
-Sift creates `research.toml` and its local state directory. It does not move existing source files or
-replace your training framework. Map the project's current directories in `research.toml`.
-
-## One research iteration
-
-The agent starts an exploration and runs it from a saved source snapshot:
+A typical iteration looks like this:
 
 ```bash
+# The agent explores and runs an experiment.
 sift explore sampler-study
-# Edit scratch/sampler-study/experiment.py
 sift run "python scratch/sampler-study/experiment.py" \
   --artifact results/metrics.json \
   --input dataset=data/train.json \
   --seed 7
-```
 
-If the experiment matters, the agent preserves the code that produced the run:
-
-```bash
+# Keep the experiment code that produced an important run.
 sift preserve sampler-study --name sampler-ablation --run RUN_ID
-```
 
-The experiment can now be reproduced by name, even after scratch or core changes:
+# Prepare a reusable function for review.
+sift propose --title "Share the calibrated sampler" \
+  --rationale "Two experiments now use the same implementation"
+# Edit the proposal directory printed by Sift, then:
+sift propose PROPOSAL_ID --ready
 
-```bash
+# The researcher reviews the core change and can reproduce the experiment.
+sift review
 sift reproduce sampler-ablation
 ```
 
-If a function should be shared across experiments, the agent prepares a core change:
+Sift prints `RUN_ID` and `PROPOSAL_ID` when they are created. Run `sift status` at any time to see
+active explorations, experiment runs, and proposals awaiting review.
 
-```bash
-sift propose --title "Share the calibrated sampler" \
-  --rationale "The same implementation is now used by two experiments"
-# Edit only the proposal directory printed by Sift.
-sift propose PROPOSAL_ID --ready
-```
+## How Sift organizes code
 
-The researcher reviews the proposal and decides whether it enters core:
+| Area | Purpose |
+|---|---|
+| **Scratch** | Preliminary analyses, debugging, notebooks, and uncertain ideas |
+| **Experiments** | Scripts and configurations kept to reproduce particular results |
+| **Core** | Tested modules maintained and reused across experiments |
 
-```bash
-sift review
-```
+These directories are configured in `research.toml`, so an existing repository does not need to be
+reorganized. Experiment code can remain experiment-specific indefinitely; preserving a result does
+not require turning its script into a shared module.
 
-Sift can open the proposal in the researcher's editor with normal file navigation and side-by-side
-diffs. The same review also works entirely in the terminal. The reviewer can request changes, rerun
-checks after editing, approve the displayed version, or leave it for later.
+## Human review for core changes
 
-## Researcher and agent interfaces
+An agent prepares a core change in a separate review workspace and runs the configured checks. The
+researcher opens it with `sift review`, using normal editor diffs or a terminal diff. The researcher
+can request changes, rerun checks after editing, approve the displayed version, or leave it for later.
 
-The researcher normally needs three commands:
+The agent workflow cannot approve or apply a proposal. Approval is tied to the exact code, diff,
+check results, and project state displayed during review. Experiment runs retain their source,
+declared inputs, environment information, logs, and declared outputs.
 
-```bash
-sift status                       # Show current work and proposals needing attention
-sift review                       # Review a proposed core change
-sift reproduce EXPERIMENT_OR_RUN  # Rerun saved code and compare its outputs
-```
-
-The agent uses `explore`, `run`, `preserve`, `propose`, and `archive` while conducting the research.
-It prepares proposals but never approves or applies them.
-
-## What Sift guarantees
-
-- A core change cannot be applied through the agent workflow without human review.
-- Approval is tied to the exact code, diff, checks, and project state shown to the reviewer.
-- Experiment runs retain source, declared inputs, environment information, logs, and declared outputs.
-- Preserved experiments remain separate from reusable core modules.
-
-These guarantees concern code history and execution. Passing tests or reproducing an output does not
-establish that a scientific conclusion is valid.
+These guarantees concern code history and execution. Passing software tests or reproducing an output
+does not establish that a scientific conclusion is valid.
 
 ## Documentation
 
 - [Experiment runs and reproducibility](docs/reproducibility.md)
 - [Reviewing core changes](docs/review.md)
-- [Artifacts, caching, archiving, and cleanup](docs/storage.md)
 - [Using Sift with coding agents](docs/agents.md)
 - [Configuration and integrations](docs/configuration.md)
+- [Artifacts, caching, archiving, and cleanup](docs/storage.md)
 - [Related research tools](docs/related-tools.md)
-- [Technical design](docs/design.md)
-- [Runnable example](examples/minimal/README.md)
+- [Technical design](docs/design.md) and [test coverage](docs/acceptance.md)
 - [Contributing](CONTRIBUTING.md)
 
-Sift supports Python 3.11+ on Windows and Linux. Its core runtime has no mandatory third-party
-dependencies. Sift is [MIT licensed](LICENSE).
+Sift supports Python 3.11+ on Windows and Linux and is [MIT licensed](LICENSE).
