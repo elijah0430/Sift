@@ -126,6 +126,7 @@ establish that a scientific conclusion is valid.
 - [Artifacts, caching, archiving, and cleanup](docs/storage.md)
 - [Using Sift with coding agents](docs/agents.md)
 - [Configuration and integrations](docs/configuration.md)
+- [Related research tools](docs/related-tools.md)
 - [Technical design](docs/design.md)
 - [Runnable example](examples/minimal/README.md)
 - [Contributing](CONTRIBUTING.md)
