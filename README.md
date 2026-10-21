@@ -111,14 +111,20 @@ files, test results, and diff, then offers familiar actions:
 [d] diff  [t] test output  [e] editor  [a] approve and apply  [l] later
 ~~~
 
-The editor comes from `VISUAL` or `EDITOR`, or from `sift review --editor COMMAND`. If an edit changes
-the proposed code, Sift requires the agent to run the checks again before approval. The lower-level
+The approval uses your OS username, shown before the diff; use `sift review --reviewer NAME` to
+change it. Choosing `a` approves and applies without another prompt. Press Enter to leave it pending.
+
+The editor comes from `VISUAL` or `EDITOR`, or from `sift review --editor COMMAND`. Use a command that
+waits until editing finishes, such as `sift review --editor "code --wait"`. If an edit changes the
+proposed code, Sift requires checks and a fresh review before approval. The lower-level
 `sift promote approve` and `sift promote apply` commands remain available for explicit workflows.
 
 **Passing tests does not grant approval.** Approval applies only to the reviewed version. Changes to
 the proposed code, diff, or test report require running `seal` again and obtaining new approval.
 Changes to the original project's core, tests, configuration, or affected scripts also require a new
 review. If applying an approved change is interrupted, Sift can resume after checking for conflicting edits.
+If another session updates and approves the proposal, an open review still cannot apply that newer
+version: reopen `sift review` to inspect it first.
 
 ### Track experiment runs and reproduce results
 

@@ -112,13 +112,21 @@ def _format_checks(material: dict) -> str:
     return "\n\n".join(sections) or "No checks were recorded."
 
 
-def _review(config: ProjectConfig, proposal_id: str | None, editor: str | None) -> int:
+def _review(
+    config: ProjectConfig,
+    proposal_id: str | None,
+    editor: str | None,
+    reviewer: str | None = None,
+) -> int:
     if not sys.stdin.isatty():
         raise SiftError("Review requires an interactive human terminal.")
     selected = _choose_proposal(config, proposal_id)
     if selected is None:
         return 0
     material = review_material(config, selected)
+    reviewer = (reviewer if reviewer is not None else getpass.getuser()).strip()
+    if not reviewer:
+        raise SiftError("Reviewer name is required; use sift review --reviewer NAME.")
     passed = sum(item["exit_code"] == 0 for item in material["checks"])
     print(f"\n{material['title']}")
     print(f"Proposal: {selected}")
@@ -127,6 +135,8 @@ def _review(config: ProjectConfig, proposal_id: str | None, editor: str | None) 
     print(f"Changes: {len(material['changes'])} files")
     print(f"Checks: {passed}/{len(material['checks'])} passed")
     print("Status: approved" if material["approved"] else "Status: ready for review")
+    if not material["approved"]:
+        print(f"Reviewer: {reviewer}")
     _page(f"{material['report']}\n\n{material['diff']}")
 
     while True:
@@ -137,28 +147,34 @@ def _review(config: ProjectConfig, proposal_id: str | None, editor: str | None) 
                 .strip()
                 .lower()
             )
-        except EOFError as exc:
-            raise SiftError("Review requires input from a human reviewer.") from exc
+        except (EOFError, KeyboardInterrupt):
+            print(f"\nLeft {selected} pending.")
+            return 0
         if action == "d":
             _page(material["diff"])
         elif action == "t":
             _page(_format_checks(material))
         elif action == "e":
-            _open_editor(Path(material["candidate_path"]), editor)
             try:
-                material = review_material(config, selected)
+                _open_editor(Path(material["candidate_path"]), editor)
+            except (SiftError, OSError, ValueError) as exc:
+                print(f"Could not open editor: {exc}")
+                continue
+            try:
+                refreshed = review_material(config, selected)
             except SiftError:
                 print(f"Working copy changed. Ask the agent to run: sift promote seal {selected}")
                 return 0
+            if refreshed["digest"] != material["digest"]:
+                print(f"The proposal changed during review. Run sift review {selected} again.")
+                return 0
         elif action == "a":
             if not material["approved"]:
-                default_reviewer = getpass.getuser()
-                reviewer = input(f"Reviewer [{default_reviewer}]: ").strip() or default_reviewer
                 approve_reviewed(config, selected, material["digest"], reviewer)
-            apply_promotion(config, selected)
+            apply_promotion(config, selected, reviewed_digest=material["digest"])
             print(f"Applied {selected}")
             return 0
-        elif action in {"l", "q"}:
+        elif action in {"l", "q", ""}:
             print(f"Left {selected} pending.")
             return 0
         else:
@@ -170,7 +186,7 @@ def _parser() -> argparse.ArgumentParser:
         prog="sift",
         description="Organize research code, track experiment runs, and reproduce results.",
     )
-    parser.add_argument("--version", action="version", version="sift 0.2.0")
+    parser.add_argument("--version", action="version", version="sift 0.2.1")
     parser.add_argument("--json", dest="json_output", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -294,10 +310,15 @@ def _parser() -> argparse.ArgumentParser:
     promote_apply.add_argument("proposal_id")
 
     review = sub.add_parser(
-        "review", help="Review pending core changes and optionally approve and apply them"
+        "review",
+        help="Review pending core changes and optionally approve and apply them",
+        description="Inspect the diff and checks, then approve and apply or leave for later.",
     )
     review.add_argument("proposal_id", nargs="?")
     review.add_argument("--editor", help="Editor command; defaults to VISUAL or EDITOR")
+    review.add_argument(
+        "--reviewer", help="Name stored with approval; defaults to your OS username"
+    )
 
     retire_parser = sub.add_parser("retire", help="Archive then remove scratch or an experiment")
     retire_sub = retire_parser.add_subparsers(dest="retire_command", required=True)
@@ -463,7 +484,7 @@ def execute(args: argparse.Namespace) -> int:
     ):
         raise SiftError("Approval and application belong to the human-controlled host.")
     if args.command == "review":
-        return _review(config, args.proposal_id, args.editor)
+        return _review(config, args.proposal_id, args.editor, args.reviewer)
     if args.command == "explore":
         path = create_exploration(config, args.name, args.question, args.from_run, args.notebook)
         _result(args, {"path": str(path)}, str(path))

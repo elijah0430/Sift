@@ -80,8 +80,11 @@ rules always run. The example includes working native configurations for both to
 
 Editing the working copy invalidates the saved review and requires the checks to run again. The
 reviewer does not need to copy a checksum manually; Sift carries the displayed digest into approval
-and validates the code, diff, checks, and project state again before applying it. The lower-level
-`promote approve` and `promote apply` commands retain checksum confirmation for explicit workflows.
+and application, checking it under the project lock even when another session has approved a newer
+version. Returning from an editor cannot replace the displayed version; a changed proposal requires
+a fresh review. Sift also validates the code, diff, checks, and project state before applying it.
+The lower-level `promote approve` command retains checksum confirmation; `promote apply` applies
+the approved version separately.
 
 Tests can simulate human input to exercise this protocol. Real agent skill/harness operations cannot
 approve themselves. Same-user unrestricted shell access defeats an advisory approval file, so host

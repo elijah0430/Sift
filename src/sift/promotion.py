@@ -299,20 +299,21 @@ def pending_proposals(config: ProjectConfig) -> list[dict]:
 
 
 def review_material(config: ProjectConfig, proposal_id: str) -> dict:
-    proposal = _proposal_dir(config, proposal_id)
-    manifest = read_json(proposal / "manifest.json")
-    if manifest.get("status") not in {"ready", "applying"}:
-        raise SiftError("Only a sealed proposal with passing checks can be reviewed.")
-    _validate_seal(config, proposal, manifest)
-    approval_path = proposal / "approval.json"
-    approval = read_json(approval_path) if approval_path.is_file() else {}
-    return {
-        **manifest,
-        "approved": approval.get("digest") == manifest.get("digest"),
-        "candidate_path": str(proposal / "candidate"),
-        "report": (proposal / "review.md").read_text(encoding="utf-8"),
-        "diff": (proposal / "proposal.diff").read_text(encoding="utf-8"),
-    }
+    with project_lock(config.state_dir):
+        proposal = _proposal_dir(config, proposal_id)
+        manifest = read_json(proposal / "manifest.json")
+        if manifest.get("status") not in {"ready", "applying"}:
+            raise SiftError("Only a sealed proposal with passing checks can be reviewed.")
+        _validate_seal(config, proposal, manifest)
+        approval_path = proposal / "approval.json"
+        approval = read_json(approval_path) if approval_path.is_file() else {}
+        return {
+            **manifest,
+            "approved": approval.get("digest") == manifest.get("digest"),
+            "candidate_path": str(proposal / "candidate"),
+            "report": (proposal / "review.md").read_text(encoding="utf-8"),
+            "diff": (proposal / "proposal.diff").read_text(encoding="utf-8"),
+        }
 
 
 def approve_reviewed(
@@ -366,10 +367,12 @@ def approve(config: ProjectConfig, proposal_id: str) -> str:
     return approve_reviewed(config, proposal_id, digest, reviewer)
 
 
-def apply(config: ProjectConfig, proposal_id: str) -> None:
+def apply(config: ProjectConfig, proposal_id: str, *, reviewed_digest: str | None = None) -> None:
     with project_lock(config.state_dir):
         proposal = _proposal_dir(config, proposal_id)
         manifest = read_json(proposal / "manifest.json")
+        if reviewed_digest is not None and manifest.get("digest") != reviewed_digest:
+            raise SiftError("The proposal changed during review. Run sift review again.")
         approval = read_json(proposal / "approval.json")
         if manifest["status"] not in {"ready", "applying"} or approval.get(
             "digest"

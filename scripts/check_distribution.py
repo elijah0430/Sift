@@ -50,9 +50,10 @@ def main():
             )
             return result.stdout
 
-        assert "sift 0.2.0" in run("--version")
+        assert f"sift {version}" in run("--version")
         assert "review" in run("--help")
         assert "--editor" in run("review", "--help")
+        assert "--reviewer" in run("review", "--help")
         run("skill", "install", "--target", str(temporary / "skills"))
         assert (temporary / "skills/sift/SKILL.md").is_file()
         assert json.loads(run("harness", "policy"))["actor"] == "agent"
