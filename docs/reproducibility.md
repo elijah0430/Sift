@@ -41,9 +41,39 @@ sift experiment compare RUN_A RUN_B
 ```
 
 The table includes run relationships, seeds, metadata supplied with `--meta`, declared input
-identities, and scalar or flat-list values from declared JSON artifacts. It reads the immutable
+identities, and scalar or flat-list values from declared JSON artifacts. Result keys retain the
+artifact path: `results/train/metrics.json` and `results/test/metrics.json` produce separate columns.
+Input fingerprints distinguish different data saved under the same path. It reads the immutable
 copies saved with each run. Other file types remain available as artifacts but are not expanded into
-comparison columns.
+comparison columns. Declared artifact directories are saved recursively.
+
+The printed short run IDs work in all commands that accept experiment references. Ambiguous prefixes
+are rejected with a list of candidates. Narrow terminals use one summary per run instead of truncating
+IDs or wrapping a wide table. JSON rows retain full IDs, artifact paths, and input SHA-256 values.
+
+## Extend an experiment
+
+```bash
+sift experiment new next-study --from-run EXPERIMENT_OR_RUN
+sift experiment run next-study
+```
+
+The new scratch directory contains the previous experiment's code. Sift carries forward the command,
+declared inputs and outputs, seeds, metadata, and parent link. Command-line options override those
+defaults. A follow-up uses the current core and input files; `reproduce` uses the saved originals.
+Runs from older direct commands without a linked scratch directory need an explicitly copied script.
+
+## Inspect results and failures
+
+```bash
+sift experiment show RUN_ID
+sift experiment logs RUN_ID
+sift experiment logs RUN_ID --follow
+```
+
+Normal runs print their ID before execution and stream stdout and stderr. Completion shows output
+paths; failure shows the exception tail and log commands. JSON mode returns a single structured result
+without streaming experiment output. `--json` can appear before or after an action.
 
 ## Save experiment code
 
@@ -56,6 +86,9 @@ sift experiment save RUN_ID --name EXPERIMENT_NAME
 This copies the code used for the run rather than the possibly edited live scratch directory. The
 saved experiment records its source hash and reproduction command. Its linked run is protected
 from retention cleanup.
+
+Saving the same run again is idempotent. Saving a different run without `--name` appends the run's
+suffix when the default name is occupied. An explicit occupied name requires a different `--name`.
 
 Experiment scripts may contain one-off code. Save them when they are needed to reproduce a
 result; move a function into core when it will be maintained and reused.

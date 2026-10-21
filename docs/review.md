@@ -37,7 +37,8 @@ sift core review
 
 Sift shows the purpose, the motivating run's configuration and JSON results, changed files, and
 check results. It can open the proposal in the configured editor, and always retains a terminal
-diff. The review menu provides these actions:
+diff. If the motivating run has a parent, both runs appear in the comparison. The review menu provides
+these actions:
 
 ```text
 [o] open code review  [d] terminal diff  [c] checks
@@ -64,6 +65,11 @@ sift core propose PROPOSAL_ID --feedback
 ```
 
 The agent then revises the proposal and runs `sift core propose PROPOSAL_ID --ready` again.
+
+On the next review, Sift shows the previous request and the files changed since that review.
+`v` opens the diff against the previous reviewed code. This request and revision diff are bound to
+the sealed proposal. Invalid queue selections can be corrected in the same menu. Failed proposal
+checks display their diagnostic output and appear separately in `sift status`.
 
 ## What approval covers
 

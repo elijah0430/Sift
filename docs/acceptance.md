@@ -36,6 +36,10 @@ the current commit; this document is not itself a test result or a claim of scie
 | CLI JSON and stable error status | cli.py | JSON and agent-denial acceptance test |
 | Agent skill included and installable | skills/sift | official skill validator; clean wheel skill installation |
 | Agent-independent host contract and launcher | harness.py | argv gate, write path, isolated launcher tests |
+| Agent experiment handoff into original project | handoff.py | CLI agent session, original-project reproduction, corrupt-output rejection |
+| Lossless split metrics, input fingerprints, short references | workspace.py | split comparison and ambiguous-reference regression tests |
+| Runnable follow-up experiment with parent and run options | lifecycle.py, cli.py | clone/save/run and inherited-option regression test |
+| Review revision context and recoverable selection | promotion.py, cli.py | feedback diff and invalid-selection regression tests |
 | Optional OS sandbox | harness.py | explicit bubblewrap backend; requires a permitted Linux host |
 | Local/mounted and command-backed artifact adapters | adapters.py | real local and subprocess transport round-trips |
 | Shared-filesystem scheduler adapter | adapters.py | real wrapper-process launch and replay acceptance test |

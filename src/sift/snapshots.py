@@ -7,6 +7,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import threading
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from .util import (
     copy_tree,
     python_runtime,
     read_json,
+    relative_files,
     safe_id,
     sha256_file,
     short_id,
@@ -183,6 +185,7 @@ def _execute(
     environment: str = "current",
     env_extra: dict[str, str] | None = None,
     launcher: str | None = None,
+    stream: bool = False,
 ) -> int:
     env = execution_environment(config, work)
     env.update(env_extra or {})
@@ -216,9 +219,29 @@ def _execute(
             runner_for(launcher).argv(command),
             cwd=work,
             env=env,
-            stdout=stdout,
-            stderr=stderr,
+            stdout=subprocess.PIPE if stream else stdout,
+            stderr=subprocess.PIPE if stream else stderr,
+            text=stream,
+            encoding="utf-8" if stream else None,
+            errors="replace" if stream else None,
         )
+        threads = []
+        if stream:
+
+            def forward(pipe, log, terminal):
+                for line in pipe:
+                    log.write(line)
+                    log.flush()
+                    terminal.write(line)
+                    terminal.flush()
+
+            for pipe, log, terminal in (
+                (process.stdout, stdout, sys.stdout),
+                (process.stderr, stderr, sys.stderr),
+            ):
+                thread = threading.Thread(target=forward, args=(pipe, log, terminal), daemon=True)
+                thread.start()
+                threads.append(thread)
         write_json(
             run_dir / "process.json",
             {"pid": process.pid, "host": platform.node(), "started_at": utc_now()},
@@ -229,6 +252,9 @@ def _execute(
             process.terminate()
             process.wait()
             raise
+        finally:
+            for thread in threads:
+                thread.join()
 
 
 def _run_verification(
@@ -266,6 +292,7 @@ def create_run(
     cache_refs: Iterable[str] = (),
     launcher: str | None = None,
     exploration: str | None = None,
+    stream: bool = False,
 ) -> tuple[str, int]:
     metadata_values = _named_values(metadata)
     input_values, seed_values, output_paths = list(inputs), list(seeds), list(artifacts)
@@ -300,14 +327,42 @@ def create_run(
         "environment": environment,
         "cache_refs": refs,
         "artifacts": [],
+        "declared_artifacts": output_paths,
         "replay_verified": False,
         "owner_pid": os.getpid(),
         "host": platform.node(),
         "launcher": launcher,
     }
     write_json(run_dir / "manifest.json", manifest)
+    if stream:
+        print(f"{run_id} running\nLogs: {run_dir}", flush=True)
     exit_code = 2
     try:
+        source_files = relative_files(config.root, config.snapshot_ignores)
+        sizes = [(path.as_posix(), (config.root / path).stat().st_size) for path in source_files]
+        manifest["snapshot"] = {
+            "files": len(sizes),
+            "bytes": sum(size for _, size in sizes),
+            "large_files": sorted(
+                (item for item in sizes if item[1] >= 1024 * 1024),
+                key=lambda item: item[1],
+                reverse=True,
+            )[:5],
+        }
+        if stream:
+            print(
+                f"Snapshot: {len(sizes)} files, {manifest['snapshot']['bytes']:,} bytes "
+                "per source/work copy",
+                flush=True,
+            )
+            for name, size in manifest["snapshot"]["large_files"]:
+                print(f"  {name}: {size:,} bytes", flush=True)
+            if manifest["snapshot"]["large_files"]:
+                print(
+                    "Use [snapshot].ignore in research.toml for large files; "
+                    "capture required data with --input NAME=PATH.",
+                    flush=True,
+                )
         copy_tree(config.root, run_dir / "source", config.snapshot_ignores)
         manifest["source_hash"] = tree_hash(run_dir / "source", ignores=())
         manifest["inputs"] = _input_records(config, run_dir, input_values)
@@ -339,20 +394,32 @@ def create_run(
             environment=environment,
             env_extra=env_extra,
             launcher=launcher,
+            stream=stream,
         )
         manifest["exit_code"] = exit_code
         if tree_hash(run_dir / "source", ignores=()) != manifest["source_hash"]:
             raise SiftError("The saved source was modified during execution.")
+        captured_outputs = set()
         for value in output_paths:
             produced = contained_path(work, value)
-            if not produced.is_file():
+            if not produced.exists():
                 if exit_code == 0:
                     raise SiftError(f"Artifact was not produced: {value}")
                 continue
-            destination = contained_path(run_dir / "artifacts", value)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(produced, destination)
-            manifest["artifacts"].append({"path": value, "sha256": sha256_file(destination)})
+            files = (
+                [produced / item for item in relative_files(produced, ignores=())]
+                if produced.is_dir()
+                else [produced]
+            )
+            for file in files:
+                relative = file.relative_to(work).as_posix()
+                if relative in captured_outputs:
+                    continue
+                captured_outputs.add(relative)
+                destination = contained_path(run_dir / "artifacts", relative)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(file, destination)
+                manifest["artifacts"].append({"path": relative, "sha256": sha256_file(destination)})
         if exit_code == 0 and verify_command:
             verification = _run_verification(
                 run_dir,
@@ -408,8 +475,10 @@ def replay_run(config: ProjectConfig, run_id: str) -> tuple[str, int, bool]:
     write_json(replay_dir / "manifest.json", record)
     exit_code, accepted = 2, False
     try:
-        for artifact in manifest["artifacts"]:
-            output = contained_path(work, artifact["path"])
+        for relative in manifest.get(
+            "declared_artifacts", [item["path"] for item in manifest["artifacts"]]
+        ):
+            output = contained_path(work, relative)
             if output.is_dir():
                 shutil.rmtree(output)
             else:

@@ -116,6 +116,22 @@ class ProjectConfig:
     def snapshot_ignores(self) -> set[str]:
         return {*DEFAULT_IGNORES, self.state.as_posix(), *self.ignores}
 
+    def core_scope(self) -> dict:
+        missing, files = [], []
+        for relative in self.core:
+            path = contained_path(self.root, relative)
+            if not path.exists():
+                missing.append(relative.as_posix())
+            elif path.is_file() and path.suffix == ".py":
+                files.append(relative.as_posix())
+            elif path.is_dir():
+                files.extend(item.relative_to(self.root).as_posix() for item in path.rglob("*.py"))
+        return {
+            "paths": [path.as_posix() for path in self.core],
+            "missing": missing,
+            "files": sorted(set(files)),
+        }
+
     def check_output_destination(self, destination: Path) -> None:
         target = destination.resolve()
         protected = [

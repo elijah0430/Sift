@@ -19,6 +19,11 @@ sift experiment run new-scoring-method \
 Use `--parent RUN_ID` when the new run directly extends a previous run. Register outputs that support
 the research conclusion; do not register caches merely because they exist.
 
+For a new iteration of saved code, use `sift experiment new NAME --from-run EXPERIMENT_OR_RUN`.
+The source script, run options, and parent link are carried forward. Override options for the new
+research condition; use `reproduce` to keep the original code and data. Inspect paths and errors with
+`sift experiment show REFERENCE` or `sift experiment logs REFERENCE`.
+
 Compare runs before deciding which code and result matter:
 
 ```bash
@@ -84,9 +89,9 @@ accidental reuse. It does not change seeds or guarantee independent trials. Stor
 
 ## Archive and restore unused code
 
-Run `sift archive scratch/NAME` after saving any experiment code and results that matter or
+Run `sift experiment archive scratch/NAME` after saving any experiment code and results that matter or
 deciding they are not needed. Sift archives the target before removing it. Restore it with
-`sift archive --restore ARCHIVE_ID`.
+`sift experiment archive --restore ARCHIVE_ID`.
 
 Archiving code does not mean that the experiment failed. Keeping an experiment script does not mean
 that it belongs in core.

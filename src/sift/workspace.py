@@ -23,20 +23,26 @@ def workspace_status(config: ProjectConfig) -> dict:
             run_counts[status] = run_counts.get(status, 0) + 1
 
     proposal_counts: dict[str, int] = {}
+    proposal_items = []
     proposals = config.state_dir / "proposals"
     if proposals.is_dir():
         for path in proposals.glob("*/manifest.json"):
-            status = read_json(path).get("status", "unknown")
+            record = read_json(path)
+            status = record.get("status", "unknown")
             proposal_counts[status] = proposal_counts.get(status, 0) + 1
+            if status in {"ready", "applying", "changes_requested", "checks_failed"}:
+                proposal_items.append(
+                    {"id": record["id"], "title": record["title"], "status": status}
+                )
 
     active_runs = sum(run_counts.get(status, 0) for status in ("preparing", "running"))
     return {
         "root": str(config.root),
         "needs_review": sum(proposal_counts.get(status, 0) for status in ("ready", "applying")),
         "changes_requested": proposal_counts.get("changes_requested", 0),
-        "draft_proposals": sum(
-            proposal_counts.get(status, 0) for status in ("draft", "checking", "checks_failed")
-        ),
+        "checks_failed": proposal_counts.get("checks_failed", 0),
+        "proposals": proposal_items,
+        "draft_proposals": sum(proposal_counts.get(status, 0) for status in ("draft", "checking")),
         "explorations": _directories(config.root / config.scratch),
         "experiments": _directories(config.root / config.experiments),
         "runs": {
@@ -58,6 +64,7 @@ def resolve_run(config: ProjectConfig, reference: str) -> str:
         return run_id
 
     candidates = [reference, slugify(reference)]
+    matches = set()
     for relative in dict.fromkeys(candidates):
         try:
             experiment = contained_path(config.root / config.experiments, relative)
@@ -70,8 +77,38 @@ def resolve_run(config: ProjectConfig, reference: str) -> str:
         if not run_id:
             raise SiftError(f"Experiment has no linked run: {reference}")
         read_json(config.state_dir / "runs" / safe_id(run_id) / "manifest.json")
-        return run_id
-    raise SiftError(f"Unknown experiment or run: {reference}")
+        matches.add(run_id)
+    run_root = config.state_dir / "runs"
+    matches.update(
+        path.parent.name
+        for path in run_root.glob("*/manifest.json")
+        if path.parent.name.startswith(reference)
+        or (
+            reference.startswith("run-")
+            and path.parent.name.rsplit("-", 1)[-1].startswith(reference[4:])
+        )
+    )
+    if len(matches) == 1:
+        return next(iter(matches))
+    if matches:
+        raise SiftError("Ambiguous run reference; use one of: " + ", ".join(sorted(matches)))
+    raise SiftError(
+        f"Unknown experiment or run: {reference}. Run sift experiment list to find its ID."
+    )
+
+
+def run_aliases(config: ProjectConfig) -> dict[str, str]:
+    identifiers = [path.parent.name for path in (config.state_dir / "runs").glob("*/manifest.json")]
+    aliases = {}
+    for identifier in identifiers:
+        suffix = identifier.rsplit("-", 1)[-1]
+        aliases[identifier] = (
+            f"run-{suffix}"
+            if sum(item.rsplit("-", 1)[-1] == suffix for item in identifiers) == 1
+            and not (config.root / config.experiments / f"run-{suffix}").exists()
+            else identifier
+        )
+    return aliases
 
 
 def _flatten_json(value: object, prefix: str = "") -> dict[str, object]:
@@ -83,7 +120,7 @@ def _flatten_json(value: object, prefix: str = "") -> dict[str, object]:
         return flattened
     if isinstance(value, list):
         if all(item is None or isinstance(item, (str, int, float, bool)) for item in value):
-            return {prefix: ",".join("" if item is None else str(item) for item in value)}
+            return {prefix: value}
         return {}
     if value is None or isinstance(value, (str, int, float, bool)):
         return {prefix: value}
@@ -119,17 +156,18 @@ def _run_values(config: ProjectConfig, manifest: dict, preserved: dict[str, list
         values[f"metadata.{name}"] = value
     for item in manifest.get("inputs", []):
         values[f"input.{item['name']}"] = item.get("value", "")
+        values[f"input_sha256.{item['name']}"] = item.get("sha256")
     run_dir = config.state_dir / "runs" / safe_id(run_id)
     for artifact in manifest.get("artifacts", []):
         relative = artifact.get("path", "")
-        path = run_dir / "artifacts" / relative
+        path = contained_path(run_dir / "artifacts", relative)
         if path.suffix.lower() != ".json" or not path.is_file() or path.stat().st_size > 1_000_000:
             continue
         try:
             content = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             continue
-        artifact_name = Path(relative).stem
+        artifact_name = Path(relative).with_suffix("").as_posix()
         for name, value in _flatten_json(content).items():
             key = f"result.{artifact_name}" + (f".{name}" if name else "")
             values[key] = value
@@ -166,11 +204,27 @@ def experiment_runs(
     dynamic = sorted(
         {key for row in rows for key in row if key not in fixed},
         key=lambda key: (
-            {"metadata": 0, "input": 1, "result": 2}.get(key.split(".", 1)[0], 3),
+            {"metadata": 0, "input": 1, "input_sha256": 2, "result": 3}.get(
+                key.split(".", 1)[0], 4
+            ),
             key,
         ),
     )
-    return {"columns": [*fixed, *dynamic], "rows": rows}
+    warnings = []
+    for key in (key for key in dynamic if key.startswith("input.")):
+        hash_key = "input_sha256." + key[6:]
+        hashes_by_path: dict[str, set[str]] = {}
+        for row in rows:
+            if row.get(hash_key):
+                hashes_by_path.setdefault(str(row.get(key)), set()).add(str(row[hash_key]))
+        if any(len(hashes) > 1 for hashes in hashes_by_path.values()):
+            warnings.append(f"Input {key[6:]} changed: the same path contains different data.")
+    return {
+        "columns": [*fixed, *dynamic],
+        "rows": rows,
+        "aliases": run_aliases(config),
+        "warnings": warnings,
+    }
 
 
 def compare_experiments(config: ProjectConfig, references: tuple[str, ...]) -> dict:

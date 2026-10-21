@@ -18,6 +18,7 @@ from .util import (
     utc_now,
     write_json,
 )
+from .workspace import resolve_run
 
 
 def create_exploration(
@@ -31,23 +32,51 @@ def create_exploration(
     if path.exists():
         raise SiftError(f"Exploration already exists: {path}")
     if from_run:
-        run = config.state_dir / "runs" / safe_id(from_run)
+        from_run = resolve_run(config, from_run)
+        run = config.state_dir / "runs" / from_run
         manifest = read_json(run / "manifest.json")
         if tree_hash(run / "source", ignores=()) != manifest["source_hash"]:
             raise SiftError("The baseline source snapshot is corrupted.")
-        path.mkdir(parents=True)
-        copy_tree(run / "source", path / "baseline", ignores=())
-        write_json(path / "sift-record.json", {"parent_run": from_run, "question": question})
+        source_name = manifest.get("exploration")
+        if not source_name:
+            raise SiftError(
+                "This run has no scratch workspace. "
+                "Start a new experiment and copy its script explicitly."
+            )
+        relative = config.scratch / source_name
+        copy_tree(contained_path(run / "source", relative), path, ignores=())
+        command = manifest["command"].replace(
+            relative.as_posix(), path.relative_to(config.root).as_posix()
+        )
+        write_json(
+            path / "sift-record.json",
+            {
+                "parent_run": from_run,
+                "question": question,
+                "command": command,
+                "artifacts": manifest.get(
+                    "declared_artifacts", [item["path"] for item in manifest.get("artifacts", [])]
+                ),
+                "inputs": [
+                    f"{item['name']}={item['value']}" for item in manifest.get("inputs", [])
+                ],
+                "seeds": manifest.get("seeds", []),
+                "metadata": manifest.get("metadata", {}),
+                "environment": manifest.get("environment", "current"),
+                "verify": manifest.get("verification", {}).get("command"),
+            },
+        )
     else:
         path.mkdir(parents=True)
     (path / "README.md").write_text(
         f"# {name}\n\nQuestion: {question or 'Describe the research question.'}\n",
         encoding="utf-8",
     )
-    (path / "experiment.py").write_text(
-        '"""Exploratory code; import reusable functions and modules from core."""\n',
-        encoding="utf-8",
-    )
+    if not from_run:
+        (path / "experiment.py").write_text(
+            '"""Exploratory code; import reusable functions and modules from core."""\n',
+            encoding="utf-8",
+        )
     if notebook:
         template = Path(__file__).parent / "templates" / "notebook.py.txt"
         (path / "notebook.py").write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
@@ -76,6 +105,19 @@ def preserve(
             config.root,
             config.experiments / slugify(experiment_name or source.name),
         )
+        if destination.exists():
+            record_path = destination / "sift-record.json"
+            if run_id and record_path.is_file() and read_json(record_path).get("run_id") == run_id:
+                return destination
+            if not experiment_name and run_id:
+                destination = contained_path(
+                    config.root, config.experiments / f"{source.name}-{run_id.rsplit('-', 1)[-1]}"
+                )
+            if destination.exists():
+                raise SiftError(
+                    f"Experiment already exists: {destination.name}. "
+                    "Choose another name with --name NAME."
+                )
         copy_tree(source, destination)
         write_json(
             destination / "sift-record.json",

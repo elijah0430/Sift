@@ -73,6 +73,16 @@ sift experiment reproduce sampler-ablation
 from declared JSON results. `sift experiment compare` shows the same fields for selected runs. Run
 `sift status` to see scratch work, saved experiments, and core changes awaiting review.
 
+Use the short run IDs printed by `list` and `compare` in subsequent commands. To extend a saved
+experiment, run `sift experiment new next-study --from-run sampler-ablation`; Sift copies its code
+and carries forward the command, declared inputs and outputs, seeds, metadata, and parent run.
+Running the new experiment uses the current project core and current input files.
+Use `reproduce` when you need the original code and inputs.
+
+Runs show live output and the saved result paths. Use `sift experiment show RUN_ID` for a summary,
+`sift experiment logs RUN_ID --follow` to follow another running terminal, and
+`sift experiment archive scratch/old-study` to set unused work aside.
+
 ## How Sift organizes code
 
 | Area | Purpose |

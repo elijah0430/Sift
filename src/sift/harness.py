@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .config import ProjectConfig
 from .errors import SiftError
+from .handoff import publish_research
 from .promotion import _protected_hash, prepare
 from .util import safe_id, utc_now, write_json
 
@@ -47,6 +48,8 @@ def guard(command: list[str]) -> dict:
         raise SiftError(
             "This gate accepts Sift argv only; arbitrary shells require a host sandbox."
         )
+    separator = arguments.index("--") if "--" in arguments else len(arguments)
+    arguments = [item for item in arguments[:separator] if item != "--json"] + arguments[separator:]
     operation = " ".join(arguments[:2])
     if (
         not arguments
@@ -153,4 +156,6 @@ def launch(config: ProjectConfig, command: list[str], sandbox: str = "candidate"
         raise SiftError(
             "The original core changed outside the candidate; inspect before continuing."
         )
+    report["research"] = publish_research(config, candidate)
+    write_json(config.state_dir / "proposals" / proposal_id / "session.json", report)
     return report

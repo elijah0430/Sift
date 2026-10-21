@@ -36,8 +36,8 @@ included in the key.
 ## Archive unused code
 
 ```bash
-sift archive scratch/old-idea
-sift archive --restore ARCHIVE_ID
+sift experiment archive scratch/old-idea
+sift experiment archive --restore ARCHIVE_ID
 ```
 
 Before removing the original directory, Sift checks references from maintained code and active runs,

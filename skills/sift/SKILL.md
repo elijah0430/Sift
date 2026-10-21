@@ -11,6 +11,8 @@ Use Sift to keep exploratory work fast while protecting maintained code.
 
 - For uncertain implementations or analyses, use `sift experiment new NAME` and work in its scratch
   directory.
+- Extend a saved experiment with `sift experiment new NAME --from-run REFERENCE`. Its code, run
+  options, and parent link carry forward; the new run uses current core and input files.
 - Run work that may support a research decision with `sift experiment run NAME`, declaring relevant
   inputs, outputs, seeds, and configuration metadata.
 - Use `sift experiment compare RUN_A RUN_B` before deciding that a result or implementation matters.
@@ -25,6 +27,10 @@ Prefer `sift --json COMMAND` for machine-readable results. Use `sift doctor` to 
 work and actual process liveness; do not infer that a job stopped from a timeout or an old manifest.
 Use the bundled harness with host permissions. The default candidate launcher detects changes to
 the original core; only a configured OS/host sandbox prevents arbitrary writes.
+
+At setup, confirm `sift check` names the intended core files. Inspect large snapshot paths and exclude
+unused data/checkpoints in `research.toml`; `.gitignore` does not control snapshots. Use the short IDs
+printed by Sift. Inspect results with `experiment show` and failures with `experiment logs`.
 
 ## Protect core
 

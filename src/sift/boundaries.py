@@ -132,6 +132,10 @@ def check_boundaries(config: ProjectConfig) -> list[Violation]:
         for item in errors
         if any(item.file.is_relative_to(path) for path in (*config.core, config.experiments))
     ]
+    violations.extend(
+        Violation(Path(path), 0, path, "core path not found; set [paths].core in research.toml")
+        for path in config.core_scope()["missing"]
+    )
     scratch = ".".join(config.scratch.parts).replace("-", "_")
     experiments = ".".join(config.experiments.parts).replace("-", "_")
     core_modules = {

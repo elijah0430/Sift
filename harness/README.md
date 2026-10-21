@@ -13,6 +13,12 @@ The agent starts in a separate working copy for proposed core changes. `SIFT_ACT
 commands in that session. The original core is compared before and after the session; the working
 copy is left available for review. Changes are not applied automatically.
 
+At session exit, completed/failed/interrupted runs and saved experiment scripts are validated and
+published to the original project. The launch report lists imported IDs and paths under `research`.
+Source, input, and artifact hash mismatches abort publication. Running jobs remain in the candidate
+and are reported under `research.pending_runs`; publication is not continuous. Core and approval
+state remain part of the separate human review workflow.
+
 This backend detects original-core changes; it cannot prevent arbitrary writes by an unrestricted
 same-user process. It never attempts to roll back unrelated user edits.
 

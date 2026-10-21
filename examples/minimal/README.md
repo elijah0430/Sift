@@ -17,7 +17,7 @@ Use the first printed run ID to keep the baseline script and link it to that run
 
 ~~~bash
 sift experiment save RUN_A --name baseline-study
-sift archive scratch/baseline
+sift experiment archive scratch/baseline
 sift experiment reproduce baseline-study
 ~~~
 

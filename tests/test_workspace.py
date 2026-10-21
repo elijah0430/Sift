@@ -71,7 +71,7 @@ def test_experiment_comparison_collects_configuration_inputs_and_json_results(pr
     assert table["rows"][0]["metadata.method"] == "baseline"
     assert table["rows"][1]["metadata.method"] == "calibrated"
     assert table["rows"][1]["input.dataset"] == "data.json"
-    assert table["rows"][1]["result.metrics.accuracy"] == 0.78
+    assert table["rows"][1]["result.results/metrics.accuracy"] == 0.78
     assert table["rows"][1]["experiment"] == "comparison-study"
     assert table["rows"][1]["scratch"] == "comparison"
 

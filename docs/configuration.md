@@ -37,6 +37,14 @@ and root-relative patterns. Capture important excluded data explicitly with `--i
 Sift rejects symlinks and junctions in snapshotted source rather than silently including an external
 tree.
 
+Initialization reports the configured core paths and Python file count. `sift check` rejects missing
+core paths and reports the number of core files checked. Map flat repositories explicitly, for
+example `core = ["models.py", "metrics.py"]`.
+
+Before execution, Sift prints the snapshot size and large files. Snapshot exclusions come from
+`[snapshot].ignore`, independently of `.gitignore`. Exclude unused data and checkpoints there, and
+declare required files with `--input NAME=PATH` so they are still captured.
+
 ## Import boundaries
 
 The built-in checker resolves local modules, relative imports, and literal dynamic imports. It checks

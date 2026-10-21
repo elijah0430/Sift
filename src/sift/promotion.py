@@ -197,6 +197,8 @@ def _seal_payload(manifest: dict) -> dict:
         payload["review_hash"] = manifest["review_hash"]
     if "check_commands" in manifest:
         payload["check_commands"] = manifest["check_commands"]
+    if "revision" in manifest:
+        payload["revision"] = manifest["revision"]
     return payload
 
 
@@ -230,6 +232,27 @@ def seal(config: ProjectConfig, proposal_id: str, commands: tuple[str, ...] = ()
         )
         if not changed:
             raise SiftError("The candidate has no changes.")
+        if feedback:
+            previous = proposal / "feedback-source"
+            revision = {
+                "feedback": (proposal / "feedback.md").read_text(encoding="utf-8"),
+                "reviewed_digest": feedback["reviewed_digest"],
+                "diff": "",
+            }
+            if previous.is_dir():
+                if tree_hash(previous, ignores=()) != feedback["candidate_hash"]:
+                    raise SiftError(
+                        "The previous review snapshot changed; restore it before resealing."
+                    )
+                previous_files = _file_state(previous)
+                revision_files = sorted(
+                    name
+                    for name in previous_files.keys() | after.keys()
+                    if previous_files.get(name) != after.get(name)
+                )
+                revision["diff"] = _make_diff(previous, candidate, revision_files)
+                revision["files"] = revision_files
+            manifest["revision"] = revision
         checks_to_run = tuple(dict.fromkeys((*config.checks, *commands)))
         if not checks_to_run:
             raise SiftError("Configure at least one correctness check before sealing.")
@@ -402,6 +425,10 @@ def request_changes(
         if manifest.get("digest") != reviewed_digest:
             raise SiftError("The proposal changed during review.")
         (proposal / "feedback.md").write_text(feedback.rstrip() + "\n", encoding="utf-8")
+        previous = proposal / "feedback-source"
+        if previous.exists():
+            shutil.rmtree(previous)
+        copy_tree(proposal / "sealed", previous, ignores=())
         write_json(
             proposal / "feedback.json",
             {
