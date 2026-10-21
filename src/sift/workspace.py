@@ -148,8 +148,11 @@ def experiment_runs(
             read_json(run_root / resolve_run(config, item) / "manifest.json") for item in references
         ]
     elif run_root.is_dir():
-        manifests = [read_json(path) for path in run_root.glob("*/manifest.json")]
-        manifests.sort(key=lambda item: item.get("started_at", ""), reverse=True)
+        records = [
+            (path.stat().st_mtime_ns, read_json(path)) for path in run_root.glob("*/manifest.json")
+        ]
+        records.sort(key=lambda item: (item[1].get("started_at", ""), item[0]), reverse=True)
+        manifests = [manifest for _, manifest in records]
     else:
         manifests = []
     if limit is not None:

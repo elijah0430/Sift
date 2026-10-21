@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 
@@ -5,7 +6,7 @@ from sift.cli import _page
 from sift.lifecycle import create_exploration, preserve
 from sift.promotion import prepare, seal
 from sift.snapshots import create_run
-from sift.util import read_json
+from sift.util import read_json, write_json
 from sift.workspace import compare_experiments, experiment_runs, resolve_run, workspace_status
 
 
@@ -73,6 +74,15 @@ def test_experiment_comparison_collects_configuration_inputs_and_json_results(pr
     assert table["rows"][1]["result.metrics.accuracy"] == 0.78
     assert table["rows"][1]["experiment"] == "comparison-study"
     assert table["rows"][1]["scratch"] == "comparison"
+
+    # Runs can start in the same second; the most recently updated manifest remains first.
+    for index, run_id in enumerate(run_ids, start=1):
+        manifest_path = project.state_dir / "runs" / run_id / "manifest.json"
+        manifest = read_json(manifest_path)
+        manifest["started_at"] = "2026-01-01T00:00:00+00:00"
+        write_json(manifest_path, manifest)
+        timestamp = 1_800_000_000_000_000_000 + index * 1_000_000_000
+        os.utime(manifest_path, ns=(timestamp, timestamp))
     assert experiment_runs(project, limit=1)["rows"][0]["run"] == run_ids[1]
 
 
