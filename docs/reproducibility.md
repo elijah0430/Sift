@@ -1,0 +1,84 @@
+# Experiment runs and reproducibility
+
+An **experiment run** is one execution of a script or command. Sift saves a source snapshot, executes
+a separate copy, and records the command, related previous run, description of the change, declared
+inputs, random seeds, runtime information, dependency files, logs, and declared output files.
+
+```bash
+sift run "python scratch/my-method/train.py" \
+  --artifact results/metrics.json \
+  --input dataset=data/train.json \
+  --seed 7 \
+  --meta model=small
+```
+
+Sift removes previous copies of declared outputs before execution, so stale files cannot be mistaken
+for new results. A missing declared output causes the run to fail even when the command exits
+successfully.
+
+## Inputs and environments
+
+Declared file or directory inputs are copied and hashed before execution. The run accesses a captured
+input through `SIFT_INPUT_NAME`. An input identifier without captured data is retained in the record,
+but cannot verify that the same data will be available later.
+
+Seeds are recorded and exposed as `SIFT_SEEDS`. The experiment remains responsible for applying them
+to its random number generators.
+
+The default environment preserves information about the active or project-local environment. Use
+`--environment uv` to reconstruct an environment from a frozen `uv.lock`. Containers, system
+libraries, GPU drivers, and accessible hardware remain execution prerequisites. Sift does not promise
+bitwise equality across different GPU stacks.
+
+## Preserve experiment code
+
+After a useful run, save the exact experiment code from its source snapshot:
+
+```bash
+sift preserve SCRATCH_NAME --name EXPERIMENT_NAME --run RUN_ID
+```
+
+This copies the code used for the run rather than the possibly edited live scratch directory. The
+preserved experiment records its source hash and reproduction command. Its linked run is protected
+from retention cleanup.
+
+Experiment scripts may contain one-off code. Preserve them when they are needed to reproduce a
+result; move a function into core when it will be maintained and reused.
+
+## Reproduce and compare
+
+```bash
+sift reproduce EXPERIMENT_OR_RUN
+```
+
+Sift validates the saved code and inputs, starts a new execution without previous output files, and
+saves the new environment information and output comparison. The original run remains unchanged.
+
+For deterministic outputs, Sift compares declared output hashes. For stochastic outputs, provide a
+program that implements justified numerical tolerances or statistical criteria:
+
+```bash
+sift run "python experiment.py" \
+  --artifact results/metrics.json \
+  --verify "python verify.py"
+```
+
+The verifier can read the original outputs through `SIFT_REFERENCE`. A successful command without
+declared outputs or a comparison program is not enough to verify reproduction. Likewise, rerunning a
+failed command does not reproduce a successful result.
+
+Use `sift inspect runs RUN_ID` to inspect a run together with its later reproduction comparisons.
+
+## Export a run
+
+```bash
+sift export RUN_ID DESTINATION
+```
+
+The export contains source, captured inputs, records, and outputs. It does not contain a newly
+installed virtual environment; reconstruct that environment from the saved dependency files. Keep
+exports or state-directory backups when moving projects between machines, because Git alone does not
+contain Sift's ignored local state.
+
+Sift's run states describe what was saved and checked. They do not establish whether an experimental
+method works or whether a research conclusion is valid.
