@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .config import ProjectConfig
 from .errors import SiftError
-from .util import copy_tree, read_json, safe_id, tree_hash, utc_now, write_json
+from .util import copy_tree, fs_path, read_json, safe_id, utc_now, write_json
 
 
 def process_alive(pid: int) -> bool:
@@ -110,12 +110,23 @@ def rebuild_index(config: ProjectConfig) -> int:
 
 
 def export_run(config: ProjectConfig, run_id: str, destination: Path) -> Path:
+    from .portability import validate_run
+    from .workspace import resolve_run
+
+    run_id = resolve_run(config, run_id)
+    destination = fs_path(destination.resolve())
     config.check_output_destination(destination)
     source = config.state_dir / "runs" / safe_id(run_id)
-    record = read_json(source / "manifest.json")
-    if tree_hash(source / "source", ignores=()) != record["source_hash"]:
-        raise SiftError("The source snapshot is corrupted.")
+    validate_run(source, run_id)
     if destination.resolve().is_relative_to(source.resolve()):
         raise SiftError("Export destination must not be inside its source record.")
-    copy_tree(source, destination, ignores=(".venv", "__pycache__"))
+    copy_tree(source, destination, ignores=("work/*", ".venv", "__pycache__"))
+    (destination / "README.md").write_text(
+        f"# Exported experiment {run_id}\n\n"
+        "From an initialized Sift project, import and reproduce it with:\n\n"
+        "```bash\nsift experiment import /path/to/this/bundle\n"
+        f"sift experiment reproduce {run_id}\n```\n\n"
+        "Use the saved dependency files to select the required research environment.\n",
+        encoding="utf-8",
+    )
     return destination

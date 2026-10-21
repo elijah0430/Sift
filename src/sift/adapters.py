@@ -91,7 +91,23 @@ class LocalRunner:
             return [
                 sys.executable,
                 "-c",
-                "import subprocess,sys; sys.exit(subprocess.call(sys.argv[1], shell=True))",
+                "import os,re,shutil,subprocess,sys\n"
+                "command=sys.argv[1]\n"
+                'match=re.match(r\'^\\s*(?:"([^"]+)"|(\\S+))\',command)\n'
+                "program=shutil.which((match[1] or match[2])) if match else None\n"
+                "operators=any(t in ('&','|','<','>') for t in "
+                're.findall(r\'"[^"]*"|[^"&|<>]+|[&|<>]\',command))\n'
+                "direct=program and not operators "
+                "and not program.lower().endswith(('.cmd','.bat'))\n"
+                "if direct:\n"
+                "    command=subprocess.list2cmdline([program])+command[match.end():]\n"
+                "    sys.exit(subprocess.call(command))\n"
+                "cwd=os.getcwd()\n"
+                "if cwd.startswith('\\\\\\\\?\\\\UNC\\\\'):\n"
+                "    cwd='\\\\\\\\'+cwd[8:]\n"
+                "elif cwd.startswith('\\\\\\\\?\\\\'):\n"
+                "    cwd=cwd[4:]\n"
+                "sys.exit(subprocess.call(command,shell=True,cwd=cwd))",
                 command,
             ]
         return ["/bin/sh", "-c", command]

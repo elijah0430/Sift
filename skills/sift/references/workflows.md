@@ -30,6 +30,11 @@ Compare runs before deciding which code and result matter:
 sift experiment compare RUN_A RUN_B
 ```
 
+Use `--columns` to select the relevant configuration and metrics, `--where COLUMN=VALUE` to select
+conditions, and `--sort METRIC --descending` to order the results. `--details` shows the complete fields.
+Successful runs keep their settings for subsequent runs of the same scratch; explicit options override
+them. `--reset-options` replaces those defaults with the options of that execution.
+
 ## Keep an experiment's code
 
 Use `sift experiment save RUN_ID --name EXPERIMENT_NAME` to keep the version of an experiment's
@@ -69,7 +74,9 @@ original results, and saves that comparison separately. Matching file hashes is 
 For stochastic experiments, preserve a comparison program or metrics with scientifically justified
 tolerances using `sift experiment run NAME --verify COMMAND`. The verifier receives original outputs through
 `SIFT_REFERENCE`. Unresolved input identifiers are not enough to verify reproduction; capture actual
-data with `--input NAME=PATH` and use `SIFT_INPUT_NAME` when external input paths must be portable.
+data with `--input NAME=PATH`. Project-relative captured inputs retain their paths in the execution
+copy. Use `SIFT_INPUT_NAME` when external input paths must be portable. Export complete run data with
+`experiment export REFERENCE BUNDLE`; the recipient imports it with `experiment import BUNDLE`.
 
 Keep the research environment selected. Use `--environment uv` only when the project has an
 appropriate frozen lock. Seeds supplied to Sift are metadata, not automatic changes to every random
@@ -92,6 +99,9 @@ accidental reuse. It does not change seeds or guarantee independent trials. Stor
 Run `sift experiment archive scratch/NAME` after saving any experiment code and results that matter or
 deciding they are not needed. Sift archives the target before removing it. Restore it with
 `sift experiment archive --restore ARCHIVE_ID`.
+
+An unambiguous scratch or saved experiment name also works. Find archive IDs with
+`sift experiment archive --list`, and pending core changes with `sift core list`.
 
 Archiving code does not mean that the experiment failed. Keeping an experiment script does not mean
 that it belongs in core.

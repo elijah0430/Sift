@@ -7,6 +7,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+from .adapters import runner_for
 from .boundaries import check_boundaries, run_boundary_engine
 from .config import PROTECTED_FILES, ProjectConfig
 from .errors import SiftError
@@ -63,6 +64,7 @@ def _initialize_review_repository(candidate: Path) -> bool:
         ("config", "user.email", "sift@localhost"),
         ("config", "core.autocrlf", "false"),
         ("config", "core.filemode", "false"),
+        ("config", "core.longpaths", "true"),
         ("add", "--all"),
         ("commit", "--quiet", "--message", "Sift review baseline"),
     )
@@ -158,9 +160,8 @@ def _run_checks(candidate: Path, config: ProjectConfig, commands: tuple[str, ...
         results.append(native)
     for command in commands:
         completed = subprocess.run(
-            command,
+            runner_for(None).argv(command),
             cwd=candidate,
-            shell=True,
             text=True,
             capture_output=True,
             env=env,

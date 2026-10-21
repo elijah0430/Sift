@@ -28,9 +28,18 @@ def workspace_status(config: ProjectConfig) -> dict:
     if proposals.is_dir():
         for path in proposals.glob("*/manifest.json"):
             record = read_json(path)
+            if record.get("agent_session"):
+                continue
             status = record.get("status", "unknown")
             proposal_counts[status] = proposal_counts.get(status, 0) + 1
-            if status in {"ready", "applying", "changes_requested", "checks_failed"}:
+            if status in {
+                "draft",
+                "checking",
+                "ready",
+                "applying",
+                "changes_requested",
+                "checks_failed",
+            }:
                 proposal_items.append(
                     {"id": record["id"], "title": record["title"], "status": status}
                 )
@@ -76,7 +85,14 @@ def resolve_run(config: ProjectConfig, reference: str) -> str:
         run_id = read_json(record_path).get("run_id")
         if not run_id:
             raise SiftError(f"Experiment has no linked run: {reference}")
-        read_json(config.state_dir / "runs" / safe_id(run_id) / "manifest.json")
+        if not (config.state_dir / "runs" / safe_id(run_id) / "manifest.json").is_file():
+            raise SiftError(
+                f"Saved experiment '{reference}' needs its original run data ({run_id}).\n"
+                f"In the original project: sift experiment export {run_id} BUNDLE\n"
+                "Here: sift experiment import BUNDLE\n"
+                "To extend saved code with current inputs: "
+                f"sift experiment new NAME --from-run {reference}"
+            )
         matches.add(run_id)
     run_root = config.state_dir / "runs"
     matches.update(
@@ -222,6 +238,10 @@ def experiment_runs(
     return {
         "columns": [*fixed, *dynamic],
         "rows": rows,
+        "history_count": len(manifests),
+        "saved_experiments": [
+            {"name": name, "run": run_id} for run_id, names in preserved.items() for name in names
+        ],
         "aliases": run_aliases(config),
         "warnings": warnings,
     }
@@ -231,3 +251,115 @@ def compare_experiments(config: ProjectConfig, references: tuple[str, ...]) -> d
     if len(references) < 2:
         raise SiftError("Compare at least two experiment runs.")
     return experiment_runs(config, references)
+
+
+def select_runs(
+    table: dict,
+    columns: str | None = None,
+    where: tuple[str, ...] = (),
+    sort: str | None = None,
+    descending: bool = False,
+    limit: int | None = None,
+) -> dict:
+    """Select columns and rows without changing the underlying run records."""
+    available = table["columns"]
+
+    def column(name: str) -> str:
+        if name in available:
+            return name
+        for prefix in ("metadata.", "input."):
+            if prefix + name in available:
+                return prefix + name
+        matches = [key for key in available if key.rsplit(".", 1)[-1] == name]
+        if len(matches) == 1:
+            return matches[0]
+        if matches:
+            raise SiftError(f"Ambiguous column '{name}'; use one of: {', '.join(matches)}")
+        raise SiftError(f"Unknown column '{name}'. Available: {', '.join(available)}")
+
+    rows = list(table["rows"])
+    for expression in where:
+        if "=" not in expression:
+            raise SiftError("Expected --where COLUMN=VALUE.")
+        name, value = expression.split("=", 1)
+        key = column(name)
+        rows = [
+            row
+            for row in rows
+            if str(row.get(key, "")) == value
+            or (key == "run" and table.get("aliases", {}).get(row.get(key)) == value)
+        ]
+    if sort:
+        key = column(sort)
+        present = [row for row in rows if row.get(key) is not None]
+        missing = [row for row in rows if row.get(key) is None]
+        numeric = all(isinstance(row[key], (int, float)) for row in present)
+        rows = (
+            sorted(
+                present, key=lambda row: row[key] if numeric else str(row[key]), reverse=descending
+            )
+            + missing
+        )
+    if limit is not None:
+        if limit < 1:
+            raise SiftError("Experiment list limit must be at least 1.")
+        rows = rows[:limit]
+    result = {**table, "rows": rows}
+    if columns:
+        names = [item.strip() for item in columns.split(",") if item.strip()]
+        if not names:
+            raise SiftError("Select at least one column.")
+        result.update(
+            columns=list(dict.fromkeys(["run", *(column(name) for name in names)])),
+            selected_columns=True,
+        )
+    return result
+
+
+def comparison_columns(table: dict) -> list[str]:
+    if table.get("selected_columns"):
+        return table["columns"]
+    results = [
+        key for key in table["columns"] if key.startswith("result.") and ".config." not in key
+    ]
+    metrics = [
+        key
+        for key in results
+        if any(
+            isinstance(row.get(key), (int, float)) and not isinstance(row.get(key), bool)
+            for row in table["rows"]
+        )
+    ]
+    return [
+        key
+        for key in table["columns"]
+        if key in {"run", "status", "scratch", "experiment", "seed"}
+        or key.startswith(("metadata.", "input."))
+        or key in (metrics or results)[:4]
+    ]
+
+
+def archive_records(config: ProjectConfig) -> list[dict]:
+    return sorted(
+        (read_json(path) for path in (config.state_dir / "archive").glob("*/manifest.json")),
+        key=lambda record: record.get("archived_at", ""),
+        reverse=True,
+    )
+
+
+def archive_path(config: ProjectConfig, reference: str) -> str:
+    candidate = Path(reference)
+    if candidate.is_relative_to(config.scratch) or candidate.is_relative_to(config.experiments):
+        return reference
+    paths = [area / slugify(reference) for area in (config.scratch, config.experiments)]
+    matches = [path for path in paths if (config.root / path).is_dir()]
+    if len(matches) == 1:
+        return matches[0].as_posix()
+    if matches:
+        raise SiftError(
+            "Ambiguous experiment name; use a path: "
+            + ", ".join(path.as_posix() for path in matches)
+        )
+    raise SiftError(
+        f"No scratch or saved experiment named '{reference}'. Use sift status to find current work."
+    )

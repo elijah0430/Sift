@@ -36,7 +36,8 @@ included in the key.
 ## Archive unused code
 
 ```bash
-sift experiment archive scratch/old-idea
+sift experiment archive old-idea
+sift experiment archive --list
 sift experiment archive --restore ARCHIVE_ID
 ```
 
@@ -47,6 +48,9 @@ responsibility.
 
 Archiving scratch work does not mean that the experiment failed. Save any code and results
 needed for later analysis before archiving the scratch directory.
+
+Names resolve to an existing scratch or saved experiment. If both share a name, supply its path, such
+as `scratch/old-idea`. The archive list prints each original path and its restore command.
 
 ## Clean up retained files
 

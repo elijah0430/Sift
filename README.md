@@ -79,9 +79,15 @@ and carries forward the command, declared inputs and outputs, seeds, metadata, a
 Running the new experiment uses the current project core and current input files.
 Use `reproduce` when you need the original code and inputs.
 
+Successful runs save their command, inputs, outputs, and metadata as defaults for the next run of
+that scratch experiment. Sift prints the effective settings before execution. Override an option or
+use `--reset-options` to replace them. Select a focused comparison with
+`sift experiment compare RUN_A RUN_B --columns method,seed,accuracy`.
+
 Runs show live output and the saved result paths. Use `sift experiment show RUN_ID` for a summary,
 `sift experiment logs RUN_ID --follow` to follow another running terminal, and
-`sift experiment archive scratch/old-study` to set unused work aside.
+`sift experiment archive old-study` to set unused work aside. Use `sift core list` and
+`sift experiment archive --list` to find pending changes and archived code.
 
 ## How Sift organizes code
 

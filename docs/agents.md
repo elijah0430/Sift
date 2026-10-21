@@ -59,10 +59,16 @@ core did not change during the session. It leaves the working copy available for
 original-core changes but cannot prevent arbitrary writes from an unrestricted process running as the
 same operating-system user.
 
-When the agent exits, Sift validates and imports finalized experiment runs and newly saved experiment
-scripts into the original project. Their IDs then work in the researcher's `experiment list`,
-`compare`, and `reproduce` commands. Source, input, and artifact hashes are checked before publication;
-core and approval files are not imported. Runs still preparing or running remain in the candidate,
+The working copy receives validated copies of existing finalized runs, so the agent can compare and
+extend previous experiments by their usual names and IDs. These copies do not expose writable links
+to the original history; modified inherited records are rejected during publication.
+Current declared project inputs are also copied when source snapshot exclusions would omit them.
+
+When the agent exits, Sift validates and imports finalized runs, saved experiment scripts, and new
+unapproved core proposals into the original project. Ready proposals are checked and sealed again in
+the receiving project, then appear in `sift core list`, `sift status`, and the researcher's review queue.
+Their IDs remain the same. Source, input, and artifact hashes are checked before publication;
+maintained core is not changed and approval files are never imported. Runs still preparing or running remain in the candidate,
 with their IDs listed under `research.pending_runs` in the launch report. This is not a live shared
 history while the isolated agent is still running.
 

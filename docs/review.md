@@ -29,6 +29,10 @@ with `--check COMMAND`.
 
 ## Review a proposal
 
+Use `sift core list` to find drafts, changes needing revision, failed checks, and ready proposals.
+`sift status` includes their titles, IDs, and next commands. `sift core propose ID` shows a concise
+summary and the candidate directory; append `--json` when an integration needs the complete record.
+
 The researcher runs:
 
 ```bash

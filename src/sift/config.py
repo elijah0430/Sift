@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import SiftError
-from .util import DEFAULT_IGNORES, contained_path
+from .util import DEFAULT_IGNORES, contained_path, fs_path
 
 PROTECTED_FILES = (
     "research.toml",
@@ -57,6 +57,7 @@ class ProjectConfig:
 
     @classmethod
     def load(cls, root: Path) -> ProjectConfig:
+        root = fs_path(root)
         path = root / "research.toml"
         try:
             data = tomllib.loads(path.read_text(encoding="utf-8"))
@@ -133,7 +134,7 @@ class ProjectConfig:
         }
 
     def check_output_destination(self, destination: Path) -> None:
-        target = destination.resolve()
+        target = fs_path(destination.resolve())
         protected = [
             *self.core,
             self.tests,
@@ -152,6 +153,7 @@ class ProjectConfig:
 
 
 def initialize_project(root: Path, package_name: str | None = None) -> ProjectConfig:
+    root = fs_path(root)
     root.mkdir(parents=True, exist_ok=True)
     if package_name and not package_name.replace("-", "_").isidentifier():
         raise SiftError("Package name must be a Python identifier.")

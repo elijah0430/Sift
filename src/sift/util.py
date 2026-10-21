@@ -60,6 +60,7 @@ def short_id(prefix: str) -> str:
 
 
 def write_json(path: Path, value: Any) -> None:
+    path = fs_path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     with tempfile.NamedTemporaryFile(
@@ -71,6 +72,7 @@ def write_json(path: Path, value: Any) -> None:
 
 
 def read_json(path: Path) -> dict[str, Any]:
+    path = fs_path(path)
     if not path.exists():
         raise SiftError(f"Missing record: {path}")
     try:
@@ -87,6 +89,7 @@ def sha256_bytes(data: bytes) -> str:
 
 
 def sha256_file(path: Path) -> str:
+    path = fs_path(path)
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
@@ -95,6 +98,7 @@ def sha256_file(path: Path) -> str:
 
 
 def is_link(path: Path) -> bool:
+    path = fs_path(path)
     try:
         information = path.lstat()
     except FileNotFoundError:
@@ -106,6 +110,7 @@ def is_link(path: Path) -> bool:
 
 
 def relative_files(root: Path, ignores: Iterable[str] = DEFAULT_IGNORES) -> list[Path]:
+    root = fs_path(root)
     if not root.is_dir() or is_link(root):
         raise SiftError(f"Expected a real directory, not a symlink or junction: {root}")
     ignored = tuple(ignores)
@@ -139,6 +144,7 @@ def tree_hash(root: Path, ignores: Iterable[str] = DEFAULT_IGNORES) -> str:
 
 
 def copy_tree(source: Path, destination: Path, ignores: Iterable[str] = DEFAULT_IGNORES) -> None:
+    source, destination = fs_path(source), fs_path(destination)
     if destination.exists():
         raise SiftError(f"Destination already exists: {destination}")
     files = relative_files(source, ignores)
@@ -146,7 +152,30 @@ def copy_tree(source: Path, destination: Path, ignores: Iterable[str] = DEFAULT_
     for relative in files:
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source / relative, target)
+        copy_file(source / relative, target)
+
+
+def fs_path(path: Path) -> Path:
+    """Keep Windows filesystem operations independent of the legacy MAX_PATH limit."""
+    if os.name != "nt":
+        return path
+    value = str(path.absolute())
+    if value.startswith("\\\\?\\"):
+        return path
+    return Path("\\\\?\\UNC\\" + value[2:] if value.startswith("\\\\") else "\\\\?\\" + value)
+
+
+def display_path(path: str | Path) -> str:
+    value = str(path)
+    return value.replace("\\\\?\\UNC\\", "\\\\").replace("\\\\?\\", "")
+
+
+def copy_file(source: Path, destination: Path) -> None:
+    """Copy metadata and content, including deeply nested Windows workspaces."""
+    try:
+        shutil.copy2(fs_path(source), fs_path(destination))
+    except OSError as exc:
+        raise SiftError(f"Could not copy {source} to {destination}: {exc}") from exc
 
 
 def safe_id(value: str) -> str:
@@ -203,7 +232,7 @@ def state_locked(function):
 
 
 def find_project(start: Path | None = None) -> Path:
-    current = (start or Path.cwd()).resolve()
+    current = fs_path((start or Path.cwd()).resolve())
     for candidate in (current, *current.parents):
         if (candidate / "research.toml").exists():
             return candidate

@@ -16,7 +16,10 @@ from .config import ProjectConfig
 from .errors import SiftError
 from .util import (
     contained_path,
+    copy_file,
     copy_tree,
+    display_path,
+    fs_path,
     python_runtime,
     read_json,
     relative_files,
@@ -146,19 +149,27 @@ def _input_records(config: ProjectConfig, run_dir: Path, values: Iterable[str]) 
         original = Path(value).expanduser()
         if not original.is_absolute():
             original = config.root / original
+        original = fs_path(original)
         try:
             relative = original.resolve().relative_to(config.root.resolve())
             captured = source / relative
         except ValueError:
             relative, captured = None, None
         if original.exists():
-            if captured is None or not captured.exists():
+            if original.resolve() == config.root.resolve() or original.resolve().is_relative_to(
+                config.state_dir.resolve()
+            ):
+                raise SiftError(
+                    "Declare individual input files or data directories, "
+                    "not the project or Sift state."
+                )
+            if captured is None or not captured.exists() or original.is_dir():
                 captured = run_dir / "inputs" / name
                 if original.is_dir():
                     copy_tree(original, captured, ignores=())
                 else:
                     captured.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(original, captured)
+                    copy_file(original, captured)
             kind = "directory" if captured.is_dir() else "file"
             digest = tree_hash(captured, ignores=()) if captured.is_dir() else sha256_file(captured)
             records.append(
@@ -174,6 +185,51 @@ def _input_records(config: ProjectConfig, run_dir: Path, values: Iterable[str]) 
         else:
             records.append({"name": name, "value": value, "kind": "identifier", "captured": None})
     return records
+
+
+def _validate_inputs(config: ProjectConfig, values: Iterable[str]) -> None:
+    for name, value in _named_values(values).items():
+        path = Path(value).expanduser()
+        resolved = path if path.is_absolute() else config.root / path
+        identifier = ":" in value and not path.is_absolute()
+        if (
+            not resolved.exists()
+            and not identifier
+            and (path.is_absolute() or "/" in value or "\\" in value or path.suffix)
+        ):
+            raise SiftError(
+                f"Input file does not exist: {name}={value}. "
+                "Check the path; use a URI for a remote input identity."
+            )
+
+
+def _materialize_inputs(
+    original: Path, work: Path, inputs: list[dict], relative_paths: bool = True
+) -> dict[str, str]:
+    environment = {}
+    for item in inputs:
+        if not item.get("captured"):
+            environment["SIFT_INPUT_" + item["name"].upper().replace("-", "_")] = item["value"]
+            continue
+        source = contained_path(original, item["captured"])
+        digest = tree_hash(source, ignores=()) if source.is_dir() else sha256_file(source)
+        if digest != item["sha256"]:
+            raise SiftError(f"Captured input changed: {item['name']}")
+        relative = item.get("source_relative") or f".sift-inputs/{safe_id(item['name'])}"
+        target = contained_path(work, relative)
+        if source.is_dir():
+            for path in relative_files(source, ignores=()):
+                destination = contained_path(target, path)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                copy_file(source / path, destination)
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            copy_file(source, target)
+        environment["SIFT_INPUT_" + item["name"].upper().replace("-", "_")] = (
+            Path(relative).as_posix() if relative_paths else display_path(source)
+        )
+    return environment
 
 
 def _execute(
@@ -267,10 +323,9 @@ def _run_verification(
         (run_dir / "verify.stderr.log").open("w", encoding="utf-8") as stderr,
     ):
         result = subprocess.run(
-            command,
+            runner_for(None).argv(command),
             cwd=work,
             env=env,
-            shell=True,
             check=False,
             stdout=stdout,
             stderr=stderr,
@@ -297,6 +352,7 @@ def create_run(
     metadata_values = _named_values(metadata)
     input_values, seed_values, output_paths = list(inputs), list(seeds), list(artifacts)
     _named_values(input_values)
+    _validate_inputs(config, input_values)
     for value in output_paths:
         contained_path(config.root, value)
     if parent:
@@ -328,6 +384,7 @@ def create_run(
         "cache_refs": refs,
         "artifacts": [],
         "declared_artifacts": output_paths,
+        "input_paths": "workspace-relative",
         "replay_verified": False,
         "owner_pid": os.getpid(),
         "host": platform.node(),
@@ -335,7 +392,15 @@ def create_run(
     }
     write_json(run_dir / "manifest.json", manifest)
     if stream:
-        print(f"{run_id} running\nLogs: {run_dir}", flush=True)
+        print(f"{run_id} running\nLogs: {display_path(run_dir)}", flush=True)
+        print(f"Command: {command}")
+        print("Inputs: " + (", ".join(input_values) or "none declared"))
+        print("Outputs: " + (", ".join(output_paths) or "none declared"))
+        print(
+            "Seeds (metadata; set them in your code): "
+            + (", ".join(map(str, seed_values)) or "none declared"),
+            flush=True,
+        )
     exit_code = 2
     try:
         source_files = relative_files(config.root, config.snapshot_ignores)
@@ -373,8 +438,19 @@ def create_run(
         )
         work = run_dir / "work"
         copy_tree(run_dir / "source", work, ignores=())
+        input_environment = _materialize_inputs(run_dir, work, manifest["inputs"])
         for value in output_paths:
             output = contained_path(work, value)
+            if any(
+                item.get("source_relative")
+                and (
+                    Path(value) == Path(item["source_relative"])
+                    or Path(value) in Path(item["source_relative"]).parents
+                    or Path(item["source_relative"]) in Path(value).parents
+                )
+                for item in manifest["inputs"]
+            ):
+                raise SiftError(f"Output overlaps a declared input: {value}")
             if output.is_dir():
                 shutil.rmtree(output)
             else:
@@ -382,10 +458,7 @@ def create_run(
         manifest["status"] = "running"
         write_json(run_dir / "manifest.json", manifest)
         env_extra = {"SIFT_RUN_ID": run_id, "SIFT_SEEDS": ",".join(map(str, seed_values))}
-        for item in manifest["inputs"]:
-            env_extra["SIFT_INPUT_" + item["name"].upper().replace("-", "_")] = (
-                str(run_dir / item["captured"]) if item["captured"] else item["value"]
-            )
+        env_extra.update(input_environment)
         exit_code = _execute(
             config,
             run_dir,
@@ -418,7 +491,7 @@ def create_run(
                 captured_outputs.add(relative)
                 destination = contained_path(run_dir / "artifacts", relative)
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(file, destination)
+                copy_file(file, destination)
                 manifest["artifacts"].append({"path": relative, "sha256": sha256_file(destination)})
         if exit_code == 0 and verify_command:
             verification = _run_verification(
@@ -485,16 +558,16 @@ def replay_run(config: ProjectConfig, run_id: str) -> tuple[str, int, bool]:
                 output.unlink(missing_ok=True)
         env_extra = {"SIFT_RUN_ID": replay_id, "SIFT_SEEDS": ",".join(map(str, manifest["seeds"]))}
         for item in manifest["inputs"]:
-            captured = item["captured"]
-            if captured:
-                path = contained_path(original, captured)
-                digest = tree_hash(path, ignores=()) if path.is_dir() else sha256_file(path)
-                if digest != item["sha256"]:
-                    raise SiftError(f"Captured input changed: {item['name']}")
-                value = str(path)
-            else:
+            if not item.get("captured"):
                 raise SiftError(f"Input identity has no captured data: {item['name']}")
-            env_extra["SIFT_INPUT_" + item["name"].upper().replace("-", "_")] = value
+        env_extra.update(
+            _materialize_inputs(
+                original,
+                work,
+                manifest["inputs"],
+                relative_paths=manifest.get("input_paths") == "workspace-relative",
+            )
+        )
         exit_code = _execute(
             config,
             replay_dir,

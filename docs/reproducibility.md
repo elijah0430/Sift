@@ -19,8 +19,15 @@ successfully.
 
 ## Inputs and environments
 
-Declared file or directory inputs are copied and hashed before execution. The run accesses a captured
-input through `SIFT_INPUT_NAME`. An input identifier without captured data is retained in the record,
+Declared file or directory inputs are copied and hashed before execution. Project-relative inputs are
+also placed at their original paths in the execution copy, even when excluded from the source snapshot.
+Existing code such as `Path("data/train.json")` therefore continues to work. External inputs are copied
+into the execution workspace and exposed through `SIFT_INPUT_NAME`. New runs expose paths relative
+to the execution root, so resolved configurations can retain the same input names during reproduction.
+Use `Path(os.environ["SIFT_INPUT_NAME"]).resolve()` if a subprocess needs an absolute path. Older runs
+retain their original input-path convention during reproduction. Path-like inputs that do not exist
+are rejected before execution. Use an explicit URI for a remote identity, such as `hf://org/dataset`.
+An input identifier without captured data is retained in the record,
 but cannot verify that the same data will be available later.
 
 Seeds are recorded and exposed as `SIFT_SEEDS`. The experiment remains responsible for applying them
@@ -40,7 +47,19 @@ sift experiment list
 sift experiment compare RUN_A RUN_B
 ```
 
-The table includes run relationships, seeds, metadata supplied with `--meta`, declared input
+The default table focuses on the run, experimental conditions, seeds, and up to four numeric results.
+Common conditions appear once below the table. Use `--details` for all fields, or choose, filter, and
+sort the comparison explicitly:
+
+```bash
+sift experiment list --where method=calibrated --sort accuracy --descending
+sift experiment compare RUN_A RUN_B --columns method,seed,accuracy
+```
+
+Short column names are accepted when unambiguous. Use the full result path to distinguish metrics
+with the same name, such as train and test accuracy. Filters apply before the list limit.
+
+The detailed table includes run relationships, seeds, metadata supplied with `--meta`, declared input
 identities, and scalar or flat-list values from declared JSON artifacts. Result keys retain the
 artifact path: `results/train/metrics.json` and `results/test/metrics.json` produce separate columns.
 Input fingerprints distinguish different data saved under the same path. It reads the immutable
@@ -62,6 +81,12 @@ The new scratch directory contains the previous experiment's code. Sift carries 
 declared inputs and outputs, seeds, metadata, and parent link. Command-line options override those
 defaults. A follow-up uses the current core and input files; `reproduce` uses the saved originals.
 Runs from older direct commands without a linked scratch directory need an explicitly copied script.
+
+Each successful `experiment run` also saves these settings as the defaults for the same scratch
+experiment. Repeating `sift experiment run NAME` keeps its declared outputs and inputs. Explicit
+options override those defaults; input and metadata overrides update matching names. Use
+`--reset-options` to start with only the options supplied for that execution. Failed runs do not
+replace the last successful settings. Seeds remain metadata: set the random generators in your code.
 
 ## Inspect results and failures
 
@@ -122,13 +147,27 @@ comparisons.
 ## Export a run
 
 ```bash
-sift export RUN_ID DESTINATION
+sift experiment export RUN_ID DESTINATION
 ```
 
-The export contains source, captured inputs, records, and outputs. It does not contain a newly
+The export accepts a full or short run ID or a saved experiment name. It contains source, captured
+inputs, records, and outputs, with instructions for the recipient. It omits the old execution copy.
+In another initialized project, import and reproduce it:
+
+```bash
+sift experiment import /path/to/DESTINATION --name baseline
+sift experiment reproduce baseline
+```
+
+Import validates source, inputs, and artifact hashes, is idempotent for identical records, and rejects
+conflicting IDs. It does not change maintained code or execute the experiment. The recipient explicitly
+runs `reproduce` in the required research environment. The export does not contain a newly
 installed virtual environment; reconstruct that environment from the saved dependency files. Keep
 exports or state-directory backups when moving projects between machines, because Git alone does not
-contain Sift's ignored local state.
+contain Sift's ignored local state. Saved experiment scripts include their run settings, so a fresh
+clone can still create a new iteration with `experiment new NAME --from-run SAVED_NAME` using current
+core and data. Reproducing the original result requires importing the original run bundle; Sift shows
+the export/import commands when that history is missing.
 
 Sift's run states describe what was saved and checked. They do not establish whether an experimental
 method works or whether a research conclusion is valid.

@@ -8,9 +8,9 @@ from pathlib import Path
 
 from .config import ProjectConfig
 from .errors import SiftError
-from .handoff import publish_research
+from .handoff import publish_research, seed_research
 from .promotion import _protected_hash, prepare
-from .util import safe_id, utc_now, write_json
+from .util import fs_path, read_json, safe_id, utc_now, write_json
 
 HUMAN_ONLY = {"core review", "review", "promote approve", "promote apply", "gc apply"}
 
@@ -92,7 +92,7 @@ def check_write(config: ProjectConfig, path: str, proposal_id: str | None = None
     target = Path(path)
     if not target.is_absolute():
         target = config.root / target
-    target = target.resolve()
+    target = fs_path(target.resolve())
     permitted = target.is_relative_to(config.root / config.scratch)
     if proposal_id:
         candidate = config.state_dir / "proposals" / safe_id(proposal_id) / "candidate"
@@ -116,6 +116,11 @@ def launch(config: ProjectConfig, command: list[str], sandbox: str = "candidate"
     proposal_id, candidate = prepare(
         config, "Agent session", "Prepared in an isolated agent workspace."
     )
+    session_manifest = config.state_dir / "proposals" / proposal_id / "manifest.json"
+    record = read_json(session_manifest)
+    record["agent_session"] = True
+    write_json(session_manifest, record)
+    inherited = seed_research(config, candidate)
     before = _protected_hash(config)
     env = os.environ.copy()
     env.update(SIFT_ACTOR="agent", SIFT_PROPOSAL=proposal_id, SIFT_PROJECT=str(config.root))
@@ -150,12 +155,18 @@ def launch(config: ProjectConfig, command: list[str], sandbox: str = "candidate"
         "exit_code": result.returncode,
         "original_core_unchanged": unchanged,
         "finished_at": utc_now(),
+        "inherited_runs": inherited,
     }
     write_json(config.state_dir / "proposals" / proposal_id / "session.json", report)
     if not unchanged:
         raise SiftError(
             "The original core changed outside the candidate; inspect before continuing."
         )
+    record = read_json(session_manifest)
+    record["agent_session"] = _protected_hash(ProjectConfig.load(candidate)) == _protected_hash(
+        config
+    )
+    write_json(session_manifest, record)
     report["research"] = publish_research(config, candidate)
     write_json(config.state_dir / "proposals" / proposal_id / "session.json", report)
     return report

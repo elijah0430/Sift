@@ -2,7 +2,9 @@
 
 from .adapters import ArtifactRef, ArtifactStore, CommandArtifactStore, LocalArtifactStore
 from .config import ProjectConfig, initialize_project
+from .diagnostics import export_run
 from .lifecycle import create_exploration, preserve, restore_retirement, retire
+from .portability import import_run
 from .promotion import (
     prepare,
     proposal_feedback,
@@ -23,6 +25,8 @@ __all__ = [
     "create_run",
     "compare_experiments",
     "experiment_runs",
+    "export_run",
+    "import_run",
     "initialize_project",
     "load_run",
     "prepare",

@@ -10,6 +10,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import textwrap
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -28,7 +29,8 @@ from .gc import apply as apply_gc
 from .gc import plan as plan_gc
 from .gc import set_pin
 from .harness import check_write, guard, launch, policy
-from .lifecycle import create_exploration, preserve, restore_retirement, retire
+from .lifecycle import create_exploration, preserve, recipe_from_run, restore_retirement, retire
+from .portability import import_run
 from .promotion import apply as apply_promotion
 from .promotion import (
     approve,
@@ -43,8 +45,17 @@ from .promotion import (
     seal,
 )
 from .snapshots import create_run, load_run, replay_run
-from .util import find_project, read_json, safe_id, slugify
-from .workspace import compare_experiments, experiment_runs, resolve_run, workspace_status
+from .util import display_path, find_project, read_json, safe_id, slugify, write_json
+from .workspace import (
+    archive_path,
+    archive_records,
+    compare_experiments,
+    comparison_columns,
+    experiment_runs,
+    resolve_run,
+    select_runs,
+    workspace_status,
+)
 
 
 def _config() -> ProjectConfig:
@@ -56,7 +67,7 @@ def _json(value: object) -> None:
 
 
 def _result(args, value: dict, message: str) -> None:
-    _json(value) if args.json_output else print(message)
+    _json(value) if args.json_output else print(display_path(message))
 
 
 def _page(text: str) -> None:
@@ -134,16 +145,20 @@ def _format_checks(material: dict) -> str:
 def _print_workspace_status(status: dict) -> None:
     runs = status["runs"]
     print("Research workspace")
-    print(f"  {status['root']}\n")
+    print(f"  {display_path(status['root'])}\n")
     print("Needs your attention")
     print(f"  Core changes needing review    {status['needs_review']}")
     print(f"  Changes requested              {status['changes_requested']}")
     print(f"  Core changes with failed checks {status.get('checks_failed', 0)}")
     for item in status.get("proposals", []):
         print(f"    {item['title']} ({item['status'].replace('_', ' ')})\n      {item['id']}")
+        action = "review" if item["status"] in {"ready", "applying"} else "propose"
+        print(f"      sift core {action} {item['id']}")
     print()
     print("Current work")
     print(f"  Scratch workspaces             {len(status['explorations'])}")
+    for name in status["explorations"]:
+        print(f"    {name}: sift experiment run {name}")
     print(f"  Draft core changes             {status['draft_proposals']}")
     print(f"  Running experiments            {runs['active']}\n")
     print("Saved research")
@@ -165,14 +180,19 @@ def _display_value(value: object) -> str:
     return str(value)
 
 
-def _print_experiment_runs(table: dict) -> None:
+def _print_experiment_runs(table: dict, details: bool = False) -> None:
     rows = table["rows"]
     if not rows:
         print("No experiment runs.")
+        if not table.get("history_count"):
+            for item in table.get("saved_experiments", []):
+                print(f"Saved code: {item['name']} (run data not imported)")
+                print(f"  Extend: sift experiment new NAME --from-run {item['name']}")
+                print("  Reproduce: sift experiment import BUNDLE")
         return
     columns = [
         column
-        for column in table["columns"]
+        for column in (table["columns"] if details else comparison_columns(table))
         if not column.startswith("input_sha256.")
         and (column in {"run", "status"} or any(row.get(column) not in (None, "") for row in rows))
     ]
@@ -189,6 +209,19 @@ def _print_experiment_runs(table: dict) -> None:
                     row[column] = f"{row.get(column, '')}@{digest[:8]}"
         display.append(row)
     rows = display
+    common = []
+    if not details and not table.get("selected_columns") and len(rows) > 1:
+        shared = [
+            column
+            for column in columns
+            if column != "run"
+            and not column.startswith("result.")
+            and len({_display_value(row.get(column, "")) for row in rows}) == 1
+        ]
+        for column in shared:
+            name = column.removeprefix("metadata.").removeprefix("input.")
+            common.append(f"{name}: {_display_value(rows[0].get(column, ''))}")
+        columns = [column for column in columns if column not in shared]
     leaves = [column.rsplit(".", 1)[-1] for column in columns]
     counts = {leaf: leaves.count(leaf) for leaf in set(leaves)}
     labels = [
@@ -211,6 +244,13 @@ def _print_experiment_runs(table: dict) -> None:
             print()
         for warning in table.get("warnings", []):
             print(f"Note: {warning}")
+        if common:
+            print(
+                textwrap.fill(
+                    "Common: " + "; ".join(common),
+                    width=shutil.get_terminal_size((100, 24)).columns,
+                )
+            )
         return
 
     def render(value: object, width: int) -> str:
@@ -230,6 +270,12 @@ def _print_experiment_runs(table: dict) -> None:
         )
     for warning in table.get("warnings", []):
         print(f"Note: {warning}")
+    if common:
+        print(
+            textwrap.fill(
+                "Common: " + "; ".join(common), width=shutil.get_terminal_size((100, 24)).columns
+            )
+        )
 
 
 def _editor_command(config: ProjectConfig, editor: str | None) -> str | None:
@@ -244,7 +290,15 @@ def _review_header(config: ProjectConfig, material: dict, selected: str, reviewe
     if material.get("baseline_run"):
         run_id = material["baseline_run"]
         manifest = load_run(config, run_id)
-        references = (manifest["parent"], run_id) if manifest.get("parent") else (run_id,)
+        references = (run_id,)
+        if manifest.get("parent"):
+            parent = manifest["parent"]
+            if (config.state_dir / "runs" / safe_id(parent) / "manifest.json").is_file():
+                references = (parent, run_id)
+            else:
+                print(
+                    f"Parent run {parent} is not available here; import its bundle to compare it."
+                )
         print("\nRelated experiments")
         _print_experiment_runs(experiment_runs(config, references))
     if material.get("revision"):
@@ -256,7 +310,7 @@ def _review_header(config: ProjectConfig, material: dict, selected: str, reviewe
     for change in material["changes"]:
         print(f"  {action_labels.get(change['action'], change['action'])}: {change['path']}")
     print(f"\nValidation\n  {passed}/{len(material['checks'])} checks passed")
-    print(f"\nReview workspace\n  {material['candidate_path']}")
+    print(f"\nReview workspace\n  {display_path(material['candidate_path'])}")
     print(f"\nReview ID: {selected}")
     if not material["approved"]:
         print(f"Reviewer: {reviewer}")
@@ -510,6 +564,11 @@ def _parser() -> argparse.ArgumentParser:
     experiment_run.add_argument(
         "--command", dest="command_text", help="Override the default experiment.py command"
     )
+    experiment_run.add_argument(
+        "--reset-options",
+        action="store_true",
+        help="Replace saved run options with this execution's options",
+    )
     _add_run_options(experiment_run)
     experiment_save = experiment_sub.add_parser(
         "save", help="Keep the scratch code used by an experiment run"
@@ -527,6 +586,28 @@ def _parser() -> argparse.ArgumentParser:
         "compare", help="Compare configurations and JSON results across runs"
     )
     experiment_compare.add_argument("references", nargs="+")
+    for view in (experiment_list, experiment_compare):
+        view.add_argument(
+            "--columns", help="Comma-separated column names, e.g. method,seed,accuracy"
+        )
+        view.add_argument("--where", action="append", default=[], metavar="COLUMN=VALUE")
+        view.add_argument("--sort", help="Sort by a column or metric")
+        view.add_argument("--descending", action="store_true")
+        view.add_argument(
+            "--details", action="store_true", help="Show full configuration and result fields"
+        )
+    experiment_export = experiment_sub.add_parser(
+        "export", help="Export a run with code, inputs, and results"
+    )
+    experiment_export.add_argument("reference")
+    experiment_export.add_argument("destination")
+    experiment_import = experiment_sub.add_parser(
+        "import", help="Validate and import an exported run"
+    )
+    experiment_import.add_argument("bundle")
+    experiment_import.add_argument(
+        "--name", help="Also save the imported experiment under this name"
+    )
     experiment_reproduce = experiment_sub.add_parser(
         "reproduce", help="Rerun saved code and compare its outputs"
     )
@@ -545,9 +626,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     experiment_archive.add_argument("path", nargs="?")
     experiment_archive.add_argument("--restore", metavar="ARCHIVE_ID")
+    experiment_archive.add_argument(
+        "--list", action="store_true", help="List archived code and restore commands"
+    )
 
     core = sub.add_parser("core", help="Propose and review changes to maintained code")
     core_sub = core.add_subparsers(dest="core_command", required=True, metavar="ACTION")
+    core_sub.add_parser("list", help="List draft, failed, and ready core changes")
     core_propose = core_sub.add_parser(
         "propose", help="Prepare reusable code without changing maintained code"
     )
@@ -828,8 +913,8 @@ def _print_run_report(config: ProjectConfig, run_id: str, streamed: bool = False
     if not streamed and report["status"] != "completed" and report["stderr_tail"]:
         print(report["stderr_tail"], file=sys.stderr)
     if report["outputs"]:
-        print("Outputs:\n  " + "\n  ".join(report["outputs"]))
-        _print_experiment_runs(experiment_runs(config, (run_id,)))
+        print("Outputs:\n  " + "\n  ".join(display_path(path) for path in report["outputs"]))
+        _print_experiment_runs(experiment_runs(config, (run_id,)), details=True)
     else:
         if load_run(config, run_id).get("declared_artifacts"):
             print("No output files were produced.")
@@ -920,7 +1005,20 @@ def _execute_proposal(config: ProjectConfig, args) -> int:
             print(f"\nEdit candidate: {feedback['candidate_path']}")
         return 0
     if args.proposal_id and not args.title and not args.ready and not args.feedback:
-        _json(proposal_summary(config, args.proposal_id))
+        summary = proposal_summary(config, args.proposal_id)
+        if args.json_output:
+            _json(summary)
+        else:
+            print(f"{summary['title']} ({summary['status'].replace('_', ' ')})\n{summary['id']}")
+            print(f"{summary.get('rationale', '')}\nEdit candidate: {summary['candidate_path']}")
+            for change in summary.get("changes", []):
+                print(f"  {change['action']}: {change['path']}")
+            if summary.get("checks"):
+                print(_format_checks({"checks": summary["checks"]}))
+            if summary["status"] == "ready":
+                print(f"Review: sift core review {summary['id']}")
+            else:
+                print(f"When ready: sift core propose {summary['id']} --ready")
         return 0
     raise SiftError("Start with --title, or provide a proposal ID with --ready or --feedback.")
 
@@ -928,7 +1026,7 @@ def _execute_proposal(config: ProjectConfig, args) -> int:
 def execute(args: argparse.Namespace) -> int:
     if args.command == "init":
         config = initialize_project(Path(args.path).resolve(), args.package)
-        print(f"Initialized Sift at {config.root}")
+        print(f"Initialized Sift at {display_path(config.root)}")
         scope = config.core_scope()
         print(f"Core: {', '.join(scope['paths'])} ({len(scope['files'])} Python files)")
         if scope["missing"]:
@@ -969,6 +1067,17 @@ def execute(args: argparse.Namespace) -> int:
     if args.command == "review" or (args.command == "core" and args.core_command == "review"):
         return _review(config, args.proposal_id, args.editor, args.reviewer, args.terminal)
     if args.command == "core":
+        if args.core_command == "list":
+            proposals = workspace_status(config)["proposals"]
+            if args.json_output:
+                _json(proposals)
+            elif not proposals:
+                print("No pending core changes.")
+            else:
+                for item in proposals:
+                    print(f"{item['id']}  {item['status'].replace('_', ' ')}  {item['title']}")
+                    print(f"  sift core propose {item['id']}")
+            return 0
         return _execute_proposal(config, args)
     if args.command == "experiment":
         if args.experiment_command == "new":
@@ -981,7 +1090,9 @@ def execute(args: argparse.Namespace) -> int:
             exploration = slugify(args.name)
             script = config.root / config.scratch / exploration / "experiment.py"
             recipe_path = script.parent / "sift-record.json"
-            recipe = read_json(recipe_path) if recipe_path.is_file() else {}
+            recipe = (
+                read_json(recipe_path) if recipe_path.is_file() and not args.reset_options else {}
+            )
             if not script.is_file() and not args.command_text and not recipe.get("command"):
                 saved = config.root / config.experiments / exploration
                 if saved.is_dir():
@@ -1004,22 +1115,38 @@ def execute(args: argparse.Namespace) -> int:
             metadata.update(dict(item.split("=", 1) for item in args.meta if "=" in item))
             if any("=" not in item for item in args.meta):
                 raise SiftError("Expected --meta NAME=VALUE.")
+            named_inputs = dict(item.split("=", 1) for item in recipe.get("inputs", []))
+            for item in args.input:
+                if "=" not in item:
+                    raise SiftError("Expected --input NAME=PATH_OR_ID.")
+                key, value = item.split("=", 1)
+                named_inputs[key] = value
+            inputs = [f"{name}={value}" for name, value in named_inputs.items()]
+            outputs = args.artifact or recipe.get("artifacts", [])
+            seeds = args.seed or recipe.get("seeds", [])
+            launcher = args.launcher or recipe.get("launcher")
             run_id, exit_code = create_run(
                 config,
                 command,
-                args.artifact or recipe.get("artifacts", []),
+                outputs,
                 resolve_run(config, args.parent) if args.parent else recipe.get("parent_run"),
                 args.change,
-                args.input or recipe.get("inputs", []),
-                args.seed or recipe.get("seeds", []),
+                inputs,
+                seeds,
                 [f"{name}={value}" for name, value in metadata.items()],
                 args.verify or recipe.get("verify"),
                 args.environment or recipe.get("environment", "current"),
                 args.cache_ref,
-                args.launcher,
+                launcher,
                 exploration=exploration,
                 stream=not args.json_output,
             )
+            if exit_code == 0:
+                manifest = load_run(config, run_id)
+                write_json(
+                    recipe_path,
+                    {**recipe, **recipe_from_run(manifest), "parent_run": manifest.get("parent")},
+                )
             if args.json_output:
                 _json(
                     {
@@ -1063,10 +1190,20 @@ def execute(args: argparse.Namespace) -> int:
                 raise SiftError("Use logs --follow without --json for continuous output.")
             return _logs(config, args.reference, args.follow)
         if args.experiment_command == "archive":
-            if args.restore and not args.path:
+            if args.list and not args.restore and not args.path:
+                records = archive_records(config)
+                if args.json_output:
+                    _json(records)
+                elif not records:
+                    print("No archived experiments.")
+                else:
+                    for record in records:
+                        print(f"{record['id']}  {record['original_path']} ({record['status']})")
+                        print(f"  sift experiment archive --restore {record['id']}")
+            elif args.restore and not args.path and not args.list:
                 print(restore_retirement(config, args.restore))
-            elif args.path and not args.restore:
-                retirement_id = retire(config, args.path)
+            elif args.path and not args.restore and not args.list:
+                retirement_id = retire(config, archive_path(config, args.path))
                 _result(
                     args,
                     {"id": retirement_id, "recoverable": True},
@@ -1077,13 +1214,44 @@ def execute(args: argparse.Namespace) -> int:
                     "Provide scratch/NAME or experiments/NAME, or --restore ARCHIVE_ID."
                 )
             return 0
+        if args.experiment_command == "export":
+            path = export_run(config, args.reference, Path(args.destination).resolve())
+            _result(args, {"path": str(path)}, str(path))
+            return 0
+        if args.experiment_command == "import":
+            run_id, created = import_run(config, Path(args.bundle).resolve())
+            manifest = load_run(config, run_id)
+            result = {"id": run_id, "imported": created}
+            if args.name:
+                if not manifest.get("exploration"):
+                    raise SiftError(
+                        "This run has no linked scratch code; omit --name to import its history."
+                    )
+                result["experiment"] = str(
+                    preserve(config, manifest["exploration"], args.name, run_id)
+                )
+            _result(
+                args,
+                result,
+                f"{'Imported' if created else 'Already imported'}: {run_id}\n"
+                f"Reproduce: sift experiment reproduce {run_id}",
+            )
+            return 0
         if args.experiment_command == "list":
-            table = experiment_runs(config, limit=args.limit)
+            table = experiment_runs(config)
         elif args.experiment_command == "compare":
             table = compare_experiments(config, tuple(args.references))
         else:
             return _execute_reproduction(config, args, args.reference)
-        _json(table) if args.json_output else _print_experiment_runs(table)
+        table = select_runs(
+            table,
+            args.columns,
+            tuple(args.where),
+            args.sort,
+            args.descending,
+            args.limit if args.experiment_command == "list" else None,
+        )
+        _json(table) if args.json_output else _print_experiment_runs(table, args.details)
         return 0
     if args.command == "status":
         status = workspace_status(config)

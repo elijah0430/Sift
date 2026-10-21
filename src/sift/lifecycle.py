@@ -21,6 +21,21 @@ from .util import (
 from .workspace import resolve_run
 
 
+def recipe_from_run(manifest: dict) -> dict:
+    return {
+        "command": manifest["command"],
+        "artifacts": manifest.get(
+            "declared_artifacts", [item["path"] for item in manifest.get("artifacts", [])]
+        ),
+        "inputs": [f"{item['name']}={item['value']}" for item in manifest.get("inputs", [])],
+        "seeds": manifest.get("seeds", []),
+        "metadata": manifest.get("metadata", {}),
+        "environment": manifest.get("environment", "current"),
+        "verify": manifest.get("verification", {}).get("command"),
+        "launcher": manifest.get("launcher"),
+    }
+
+
 def create_exploration(
     config: ProjectConfig,
     name: str,
@@ -32,6 +47,34 @@ def create_exploration(
     if path.exists():
         raise SiftError(f"Exploration already exists: {path}")
     if from_run:
+        saved = contained_path(config.root / config.experiments, slugify(from_run))
+        saved_record = (
+            read_json(saved / "sift-record.json") if (saved / "sift-record.json").is_file() else {}
+        )
+        missing_run = (
+            saved_record.get("run_id")
+            and not (
+                config.state_dir / "runs" / safe_id(saved_record["run_id"]) / "manifest.json"
+            ).is_file()
+        )
+        if missing_run and saved_record.get("recipe"):
+            if (
+                saved_record.get("code_hash")
+                and tree_hash(saved, ignores=("sift-record.json",)) != saved_record["code_hash"]
+            ):
+                raise SiftError("Saved experiment code changed; inspect it before extending it.")
+            copy_tree(saved, path, ignores=("sift-record.json",))
+            recipe = dict(saved_record["recipe"])
+            recipe["command"] = recipe["command"].replace(
+                saved_record["source"], path.relative_to(config.root).as_posix()
+            )
+            recipe.update(parent_run=None, origin_run=saved_record["run_id"], question=question)
+            write_json(path / "sift-record.json", recipe)
+            (path / "README.md").write_text(
+                f"# {name}\n\nQuestion: {question or 'Describe the research question.'}\n",
+                encoding="utf-8",
+            )
+            return path
         from_run = resolve_run(config, from_run)
         run = config.state_dir / "runs" / from_run
         manifest = read_json(run / "manifest.json")
@@ -53,17 +96,8 @@ def create_exploration(
             {
                 "parent_run": from_run,
                 "question": question,
+                **recipe_from_run(manifest),
                 "command": command,
-                "artifacts": manifest.get(
-                    "declared_artifacts", [item["path"] for item in manifest.get("artifacts", [])]
-                ),
-                "inputs": [
-                    f"{item['name']}={item['value']}" for item in manifest.get("inputs", [])
-                ],
-                "seeds": manifest.get("seeds", []),
-                "metadata": manifest.get("metadata", {}),
-                "environment": manifest.get("environment", "current"),
-                "verify": manifest.get("verification", {}).get("command"),
             },
         )
     else:
@@ -129,6 +163,8 @@ def preserve(
                 "status": "preserved",
                 "run_id": run_id,
                 "core_source_hash": run_record.get("source_hash") if run_record else None,
+                "recipe": recipe_from_run(run_record) if run_record else {},
+                "code_hash": tree_hash(source, ignores=("sift-record.json",)),
                 "reproduction": (
                     f"sift experiment reproduce {run_id}" if run_id else "No experiment run linked."
                 ),

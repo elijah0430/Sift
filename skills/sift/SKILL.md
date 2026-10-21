@@ -16,6 +16,7 @@ Use Sift to keep exploratory work fast while protecting maintained code.
 - Run work that may support a research decision with `sift experiment run NAME`, declaring relevant
   inputs, outputs, seeds, and configuration metadata.
 - Use `sift experiment compare RUN_A RUN_B` before deciding that a result or implementation matters.
+  Select relevant metrics with `--columns method,seed,accuracy`; use `--details` for all settings.
 - Keep the exact experiment code with `sift experiment save RUN_ID` when it should remain reproducible.
 - When a function or module should be maintained and reused, prepare a core change with
   `sift core propose --from-run RUN_ID` and submit it for human review.
@@ -32,6 +33,11 @@ At setup, confirm `sift check` names the intended core files. Inspect large snap
 unused data/checkpoints in `research.toml`; `.gitignore` does not control snapshots. Use the short IDs
 printed by Sift. Inspect results with `experiment show` and failures with `experiment logs`.
 
+Successful runs retain their execution settings for the same scratch experiment. Inspect the saved
+`sift-record.json` before repeating work; override changed conditions explicitly or use
+`--reset-options`. Project-relative declared inputs remain available at their original relative paths.
+For another researcher's exported experiment, use `experiment import BUNDLE` before reproducing it.
+
 ## Protect core
 
 During ordinary exploration, write only inside the relevant scratch directory. Core may be read and imported.
@@ -42,6 +48,10 @@ review workspace it creates, then run `sift core propose PROPOSAL_ID --ready`. T
 an exact version for review. Cite the motivating run when the change follows from an experiment.
 Present the reason for the change, public API, test results, behavior changes, and remaining
 uncertainty to the user.
+
+An isolated harness session includes copies of previous experiment history. On session exit, finalized
+runs and new proposals return to the original project; ready proposals are checked again there.
+Use the IDs in the handoff report when asking the researcher to review in their original terminal.
 
 Before revising a proposal returned by the reviewer, run
 `sift core propose PROPOSAL_ID --feedback`. Address the concrete requests in the candidate, rerun the
