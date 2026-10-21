@@ -6,7 +6,8 @@
   "human_only": [
     "sift gc apply",
     "sift promote apply",
-    "sift promote approve"
+    "sift promote approve",
+    "sift review"
   ],
   "sandbox_backends": [
     "candidate",

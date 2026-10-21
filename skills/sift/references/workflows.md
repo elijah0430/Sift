@@ -35,7 +35,8 @@ into core when they will be maintained and reused across experiments.
 5. Run `sift promote seal PROPOSAL_ID`. Supply additional `--check COMMAND` arguments when the
    configured checks do not cover the relevant behavior.
 6. Inspect with `sift promote show PROPOSAL_ID` and report the exact diff and digest.
-7. Stop. A human reviewer runs `sift promote approve` and `sift promote apply`.
+7. Stop. Tell the human reviewer to run `sift review`. It lists pending changes when no proposal ID
+   is supplied and combines inspection, approval, and application in one terminal flow.
 
 A code review should explain:
 

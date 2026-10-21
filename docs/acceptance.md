@@ -21,6 +21,7 @@ the current commit; this document is not itself a test result or a claim of scie
 | Isolated promotion and readable report | promotion.py | promotion tests; wheel CLI checks |
 | Configured checks cannot be bypassed by extra checks | promotion.py | configured-check invariant |
 | Exact human-reviewed candidate only | promotion.py | missing approval, reseal, post-review edit, report mutation tests |
+| One-command terminal review and apply | cli.py, promotion.py | displayed-version apply and post-display mutation tests |
 | Cache/export/artifact CLI cannot bypass maintained-code or approval-state protection | config.py | test_write_boundary.py |
 | Conflict detection and interrupted application | promotion.py | base-conflict and resumable-application acceptance tests |
 | Recovery from stopped jobs, checks for active processes | diagnostics.py | process-liveness and interrupted-run invariant |

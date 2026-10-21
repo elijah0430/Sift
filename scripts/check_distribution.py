@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import tempfile
+import tomllib
 import venv
 import zipfile
 from pathlib import Path
@@ -11,7 +12,12 @@ from pathlib import Path
 
 def main():
     root = Path(__file__).resolve().parents[1]
-    wheel = next((root / "dist").glob("sift_research-*.whl"))
+    project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    version = project["project"]["version"]
+    wheels = list((root / "dist").glob(f"sift_research-{version}-*.whl"))
+    if len(wheels) != 1:
+        raise RuntimeError(f"Expected one wheel for version {version}, found {len(wheels)}.")
+    wheel = wheels[0]
     with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
         for required in (
@@ -44,7 +50,9 @@ def main():
             )
             return result.stdout
 
-        assert "sift" in run("--version")
+        assert "sift 0.2.0" in run("--version")
+        assert "review" in run("--help")
+        assert "--editor" in run("review", "--help")
         run("skill", "install", "--target", str(temporary / "skills"))
         assert (temporary / "skills/sift/SKILL.md").is_file()
         assert json.loads(run("harness", "policy"))["actor"] == "agent"

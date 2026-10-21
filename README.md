@@ -98,12 +98,22 @@ sift promote show PROPOSAL_ID
 version of the proposed changes for review. Additional `--check` commands supplement those checks.
 The review includes the code diff, test results, and a checksum identifying that version.
 
-A researcher reviews the changes and runs these commands in their terminal:
+A researcher reviews the changes in one terminal flow:
 
 ~~~bash
-sift promote approve PROPOSAL_ID
-sift promote apply PROPOSAL_ID
+sift review
 ~~~
+
+If several changes are waiting, Sift asks which one to review. It shows the explanation, changed
+files, test results, and diff, then offers familiar actions:
+
+~~~text
+[d] diff  [t] test output  [e] editor  [a] approve and apply  [l] later
+~~~
+
+The editor comes from `VISUAL` or `EDITOR`, or from `sift review --editor COMMAND`. If an edit changes
+the proposed code, Sift requires the agent to run the checks again before approval. The lower-level
+`sift promote approve` and `sift promote apply` commands remain available for explicit workflows.
 
 **Passing tests does not grant approval.** Approval applies only to the reviewed version. Changes to
 the proposed code, diff, or test report require running `seal` again and obtaining new approval.
@@ -179,8 +189,9 @@ sift skill install --target /path/to/agent/skills
 ~~~
 
 The [skill](skills/sift/SKILL.md) guides the agent through exploratory coding, saving experiment
-scripts, refactoring shared code, reporting tests and results, and archiving unused code. A human
-must approve and apply core changes and permanent cleanup.
+scripts, refactoring shared code, reporting tests and results, and archiving unused code. The agent
+prepares core changes and hands them to the researcher through `sift review`. A human must approve
+core changes and permanent cleanup.
 
 The [harness](harness/README.md) checks which commands an agent may run and which files it may edit,
 and can launch an agent in a separate working copy:
@@ -219,11 +230,12 @@ provide replaceable experimental components; adopting Hamilton or another graph 
 | Start and run | `init` · `explore` · `run` |
 | Understand and validate | `inspect` · `check` · `doctor` |
 | Preserve and reproduce | `preserve` · `replay` · `export` |
-| Maintain core | `promote prepare` · `seal` · `show` · `approve` · `apply` |
+| Maintain core | `promote prepare` · `seal` · `show` · `review` |
 | Store and retire | `artifact` · `cache` · `pin` · `retire` · `gc` |
 | Connect an agent | `skill` · `harness` |
 
-Use `sift --json COMMAND` for structured output. Human approval keeps its review visible in the terminal.
+Use `sift --json COMMAND` for structured output. `sift review` is interactive and keeps the code
+review visible in the terminal.
 [Design and configuration](docs/design.md) · [Test coverage](docs/acceptance.md) ·
 [Runnable example](examples/minimal/README.md) · [Agent workflow](skills/sift/references/workflows.md)
 

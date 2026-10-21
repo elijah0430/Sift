@@ -71,10 +71,17 @@ rules always run. The example includes working native configurations for both to
 4. Reject source changes made by the checks. Freeze candidate bytes separately and record hashes.
 5. Bind the diff, changed-file list, reference snapshot, protected project state, candidate, rationale,
    and check report to one digest.
-6. A human reviews the changes and approves the version identified by that digest in their terminal.
-7. Revalidate the saved review version and original project before application. Journal application and write files
+6. `sift review` shows the report and diff in a human-controlled terminal. The reviewer can inspect
+   test output, open the working copy in an editor, approve and apply, or leave the change pending.
+7. Approval records the digest of the version displayed in that review session. Revalidate the saved
+   review version and original project before application. Journal application and write files
    through atomic replacements. Resume interrupted application only if affected files still match
    their recorded before/after content.
+
+Editing the working copy invalidates the saved review and requires the checks to run again. The
+reviewer does not need to copy a checksum manually; Sift carries the displayed digest into approval
+and validates the code, diff, checks, and project state again before applying it. The lower-level
+`promote approve` and `promote apply` commands retain checksum confirmation for explicit workflows.
 
 Tests can simulate human input to exercise this protocol. Real agent skill/harness operations cannot
 approve themselves. Same-user unrestricted shell access defeats an advisory approval file, so host

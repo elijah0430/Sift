@@ -54,6 +54,14 @@ def test_review_diff_and_test_results_are_bound_to_digest(project):
         apply(project, proposal_id)
 
 
+def test_displayed_review_report_is_bound_to_the_seal(project):
+    proposal_id, _ = sealed_proposal(project)
+    proposal = project.state_dir / "proposals" / proposal_id
+    (proposal / "review.md").write_text("Everything is fine.\n", encoding="utf-8")
+    with pytest.raises(SiftError, match="changed"):
+        apply(project, proposal_id)
+
+
 def test_additional_checks_cannot_replace_configured_checks(project):
     config_path = project.root / "research.toml"
     config_path.write_text(

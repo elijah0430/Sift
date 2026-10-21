@@ -40,8 +40,8 @@ sift promote show PROPOSAL_ID
 Review the code diff, API, assumptions, and test results. A human then runs:
 
 ~~~bash
-sift promote approve PROPOSAL_ID
-sift promote apply PROPOSAL_ID
+sift review PROPOSAL_ID
 ~~~
 
-Passing tests do not grant approval. Replaying the original run still uses its saved original core.
+Choose `a` to approve and apply the displayed change. Passing tests do not grant approval. Replaying
+the original run still uses its saved original core.

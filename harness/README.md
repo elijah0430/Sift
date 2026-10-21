@@ -40,8 +40,12 @@ Allow toolkit-managed state changes through the permitted CLI actions, not arbit
 ## Human actions
 
 Only a human-controlled terminal or trusted host review UI may approve and apply core changes.
-The skill never runs `promote approve`, `promote apply`, or `gc apply`. A terminal flag is not proof
-of human identity against an unrestricted process; actual authority is supplied by the host.
+The skill never runs `review`, `promote approve`, `promote apply`, or `gc apply`. A terminal flag is
+not proof of human identity against an unrestricted process; actual authority is supplied by the host.
+
+`sift review` lists pending core changes and displays the report and diff before offering interactive
+actions. Approval and application happen together only after the reviewer chooses that action. If
+the reviewer edits the working copy, the proposal must be checked and prepared for review again.
 
 `sift promote seal` saves a fixed version of the proposed code, diff, check results, and original
 project state for review, identified by a checksum. Editing reviewed content requires running `seal`

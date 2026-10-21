@@ -35,9 +35,10 @@ creates, then run `sift promote seal`. This checks and saves a fixed version for
 reason for the change, public API, test results, behavior changes, remaining uncertainty, diff path,
 and version checksum to the user.
 
-Never run `sift promote approve` or `sift promote apply`. Those commands are reserved for a human
-reviewer and apply only to the reviewed version. If the proposed code changes, run `seal` again and
-request a new review.
+Never run `sift review`, `sift promote approve`, or `sift promote apply`. Tell the user that the core
+change is ready and ask them to run `sift review` in their terminal. That flow shows the report, diff,
+and test output and can approve and apply the exact reviewed version. If the proposed code changes,
+run `seal` again and request a new review.
 
 You may prepare a cleanup plan with `sift gc plan`. Never run `sift gc apply`; show its targets and
 digest to the user for human review. Pin any run or archive that must survive retention cleanup.

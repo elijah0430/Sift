@@ -11,7 +11,7 @@ from .errors import SiftError
 from .promotion import _protected_hash, prepare
 from .util import safe_id, utc_now, write_json
 
-HUMAN_ONLY = {"promote approve", "promote apply", "gc apply"}
+HUMAN_ONLY = {"review", "promote approve", "promote apply", "gc apply"}
 
 
 def policy(config: ProjectConfig | None = None) -> dict:
@@ -48,7 +48,12 @@ def guard(command: list[str]) -> dict:
             "This gate accepts Sift argv only; arbitrary shells require a host sandbox."
         )
     operation = " ".join(arguments[:2])
-    if operation in HUMAN_ONLY or not arguments or arguments[0].startswith("-"):
+    if (
+        not arguments
+        or operation in HUMAN_ONLY
+        or arguments[0] in HUMAN_ONLY
+        or arguments[0].startswith("-")
+    ):
         raise SiftError("This command is reserved for a human reviewer or is not an agent action.")
     allowed = {
         "explore",

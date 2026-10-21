@@ -2,9 +2,10 @@ import sys
 
 import pytest
 
+from sift.cli import _review
 from sift.errors import SiftError
 from sift.promotion import apply, approve, prepare, seal
-from sift.util import utc_now, write_json
+from sift.util import read_json, utc_now, write_json
 
 
 def test_promotion_requires_exact_human_approval(project):
@@ -75,3 +76,55 @@ def test_approval_requires_human_terminal(project, monkeypatch):
     monkeypatch.setattr(sys, "stdin", NonInteractive())
     with pytest.raises(SiftError, match="interactive human"):
         approve(project, proposal_id)
+
+
+def test_review_approves_and_applies_the_displayed_change(project, monkeypatch):
+    target = project.root / "src" / "demo" / "scoring.py"
+    target.write_text("def score(x):\n    return x\n", encoding="utf-8")
+    proposal_id, candidate = prepare(project, "Share calibrated scoring", "Used by two studies.")
+    (candidate / "src" / "demo" / "scoring.py").write_text(
+        "def score(x):\n    return x * 2\n", encoding="utf-8"
+    )
+    seal(project, proposal_id, (f'"{sys.executable}" -c "print(\'ok\')"',))
+
+    class Interactive:
+        def isatty(self):
+            return True
+
+    pages = []
+    answers = iter(["a", "Researcher"])
+    monkeypatch.setattr(sys, "stdin", Interactive())
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    monkeypatch.setattr("sift.cli._page", pages.append)
+
+    assert _review(project, proposal_id, None) == 0
+    assert "x * 2" in target.read_text(encoding="utf-8")
+    assert "Share calibrated scoring" in pages[0]
+    manifest = read_json(project.state_dir / "proposals" / proposal_id / "manifest.json")
+    approval = read_json(project.state_dir / "proposals" / proposal_id / "approval.json")
+    assert manifest["status"] == "applied"
+    assert approval["reviewer"] == "Researcher"
+    assert approval["digest"] == manifest["digest"]
+
+
+def test_review_rejects_changes_made_after_display(project, monkeypatch):
+    proposal_id, candidate = prepare(project, "New value")
+    target = candidate / "src" / "demo" / "value.py"
+    target.write_text("VALUE = 1\n", encoding="utf-8")
+    seal(project, proposal_id, (f'"{sys.executable}" -c "print(\'ok\')"',))
+
+    class Interactive:
+        def isatty(self):
+            return True
+
+    def change_after_display(_text):
+        target.write_text("VALUE = 2\n", encoding="utf-8")
+
+    answers = iter(["a", "Researcher"])
+    monkeypatch.setattr(sys, "stdin", Interactive())
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    monkeypatch.setattr("sift.cli._page", change_after_display)
+
+    with pytest.raises(SiftError, match="changed.*review|Reseal"):
+        _review(project, proposal_id, None)
+    assert not (project.root / "src" / "demo" / "value.py").exists()

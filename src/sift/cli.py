@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import getpass
 import io
 import json
 import os
+import pydoc
+import shlex
 import shutil
+import subprocess
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -25,7 +29,15 @@ from .gc import set_pin
 from .harness import check_write, guard, launch, policy
 from .lifecycle import create_exploration, preserve, restore_retirement, retire
 from .promotion import apply as apply_promotion
-from .promotion import approve, prepare, proposal_summary, seal
+from .promotion import (
+    approve,
+    approve_reviewed,
+    pending_proposals,
+    prepare,
+    proposal_summary,
+    review_material,
+    seal,
+)
 from .snapshots import create_run, load_run, replay_run
 from .util import find_project, read_json, safe_id
 
@@ -42,12 +54,123 @@ def _result(args, value: dict, message: str) -> None:
     _json(value) if args.json_output else print(message)
 
 
+def _page(text: str) -> None:
+    pydoc.pager(text.rstrip() + "\n")
+
+
+def _open_editor(path: Path, editor: str | None = None) -> None:
+    command = editor or os.environ.get("VISUAL") or os.environ.get("EDITOR")
+    if not command:
+        raise SiftError("Set VISUAL or EDITOR, or pass sift review --editor COMMAND.")
+    argv = shlex.split(command, posix=os.name != "nt")
+    if os.name == "nt":
+        argv = [
+            part[1:-1] if len(part) >= 2 and part[0] == part[-1] and part[0] in {'"', "'"} else part
+            for part in argv
+        ]
+    if not argv:
+        raise SiftError("The editor command is empty.")
+    completed = subprocess.run([*argv, str(path)], check=False)
+    if completed.returncode:
+        raise SiftError(f"Editor exited with status {completed.returncode}.")
+
+
+def _choose_proposal(config: ProjectConfig, proposal_id: str | None) -> str | None:
+    if proposal_id:
+        return proposal_id
+    proposals = pending_proposals(config)
+    if not proposals:
+        print("No core changes are waiting for review.")
+        return None
+    if len(proposals) == 1:
+        return proposals[0]["id"]
+    print("Core changes waiting for review:\n")
+    for index, item in enumerate(proposals, start=1):
+        state = "approved" if item["approved"] else "ready"
+        print(f"  {index}. {item['title']} ({item['changes']} files, {state})")
+        print(f"     {item['id']}")
+    try:
+        selection = input("\nSelect a number, or [l] leave for later: ").strip().lower()
+    except EOFError as exc:
+        raise SiftError("Review requires input from a human reviewer.") from exc
+    if selection in {"l", "q", ""}:
+        return None
+    if not selection.isdigit() or not 1 <= int(selection) <= len(proposals):
+        raise SiftError("Select one of the listed proposal numbers.")
+    return proposals[int(selection) - 1]["id"]
+
+
+def _format_checks(material: dict) -> str:
+    sections = []
+    for item in material["checks"]:
+        section = [f"$ {item['command']}", f"exit {item['exit_code']}"]
+        if item.get("stdout"):
+            section.extend(("", item["stdout"].rstrip()))
+        if item.get("stderr"):
+            section.extend(("", "stderr:", item["stderr"].rstrip()))
+        sections.append("\n".join(section))
+    return "\n\n".join(sections) or "No checks were recorded."
+
+
+def _review(config: ProjectConfig, proposal_id: str | None, editor: str | None) -> int:
+    if not sys.stdin.isatty():
+        raise SiftError("Review requires an interactive human terminal.")
+    selected = _choose_proposal(config, proposal_id)
+    if selected is None:
+        return 0
+    material = review_material(config, selected)
+    passed = sum(item["exit_code"] == 0 for item in material["checks"])
+    print(f"\n{material['title']}")
+    print(f"Proposal: {selected}")
+    if material.get("rationale"):
+        print(f"Why: {material['rationale']}")
+    print(f"Changes: {len(material['changes'])} files")
+    print(f"Checks: {passed}/{len(material['checks'])} passed")
+    print("Status: approved" if material["approved"] else "Status: ready for review")
+    _page(f"{material['report']}\n\n{material['diff']}")
+
+    while True:
+        action_label = "apply" if material["approved"] else "approve and apply"
+        try:
+            action = (
+                input(f"\n[d] diff  [t] test output  [e] editor  [a] {action_label}  [l] later\n> ")
+                .strip()
+                .lower()
+            )
+        except EOFError as exc:
+            raise SiftError("Review requires input from a human reviewer.") from exc
+        if action == "d":
+            _page(material["diff"])
+        elif action == "t":
+            _page(_format_checks(material))
+        elif action == "e":
+            _open_editor(Path(material["candidate_path"]), editor)
+            try:
+                material = review_material(config, selected)
+            except SiftError:
+                print(f"Working copy changed. Ask the agent to run: sift promote seal {selected}")
+                return 0
+        elif action == "a":
+            if not material["approved"]:
+                default_reviewer = getpass.getuser()
+                reviewer = input(f"Reviewer [{default_reviewer}]: ").strip() or default_reviewer
+                approve_reviewed(config, selected, material["digest"], reviewer)
+            apply_promotion(config, selected)
+            print(f"Applied {selected}")
+            return 0
+        elif action in {"l", "q"}:
+            print(f"Left {selected} pending.")
+            return 0
+        else:
+            print("Choose d, t, e, a, or l.")
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sift",
         description="Organize research code, track experiment runs, and reproduce results.",
     )
-    parser.add_argument("--version", action="version", version="sift 0.1.0")
+    parser.add_argument("--version", action="version", version="sift 0.2.0")
     parser.add_argument("--json", dest="json_output", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -169,6 +292,12 @@ def _parser() -> argparse.ArgumentParser:
     promote_approve.add_argument("proposal_id")
     promote_apply = promote_sub.add_parser("apply", help="Apply a human-approved patch")
     promote_apply.add_argument("proposal_id")
+
+    review = sub.add_parser(
+        "review", help="Review pending core changes and optionally approve and apply them"
+    )
+    review.add_argument("proposal_id", nargs="?")
+    review.add_argument("--editor", help="Editor command; defaults to VISUAL or EDITOR")
 
     retire_parser = sub.add_parser("retire", help="Archive then remove scratch or an experiment")
     retire_sub = retire_parser.add_subparsers(dest="retire_command", required=True)
@@ -328,10 +457,13 @@ def execute(args: argparse.Namespace) -> int:
 
     config = _config()
     if os.environ.get("SIFT_ACTOR") == "agent" and (
-        (args.command == "promote" and args.promote_command in {"approve", "apply"})
+        args.command == "review"
+        or (args.command == "promote" and args.promote_command in {"approve", "apply"})
         or (args.command == "gc" and args.gc_command == "apply")
     ):
         raise SiftError("Approval and application belong to the human-controlled host.")
+    if args.command == "review":
+        return _review(config, args.proposal_id, args.editor)
     if args.command == "explore":
         path = create_exploration(config, args.name, args.question, args.from_run, args.notebook)
         _result(args, {"path": str(path)}, str(path))
@@ -488,8 +620,10 @@ def main(argv: list[str] | None = None) -> None:
     args = _parser().parse_args(argv)
     try:
         if args.json_output:
-            if (args.command == "promote" and args.promote_command == "approve") or (
-                args.command == "gc" and args.gc_command == "apply"
+            if (
+                args.command == "review"
+                or (args.command == "promote" and args.promote_command == "approve")
+                or (args.command == "gc" and args.gc_command == "apply")
             ):
                 raise SiftError("Human review requires visible terminal output; omit --json.")
             output = io.StringIO()

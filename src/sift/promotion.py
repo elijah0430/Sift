@@ -150,7 +150,7 @@ def _run_checks(candidate: Path, config: ProjectConfig, commands: tuple[str, ...
 
 
 def _seal_payload(manifest: dict) -> dict:
-    return {
+    payload = {
         key: manifest[key]
         for key in (
             "title",
@@ -165,6 +165,9 @@ def _seal_payload(manifest: dict) -> dict:
             "diff_hash",
         )
     }
+    if "review_hash" in manifest:
+        payload["review_hash"] = manifest["review_hash"]
+    return payload
 
 
 def seal(config: ProjectConfig, proposal_id: str, commands: tuple[str, ...] = ()) -> str:
@@ -224,21 +227,25 @@ def seal(config: ProjectConfig, proposal_id: str, commands: tuple[str, ...] = ()
                 "diff_hash": sha256_file(proposal / "proposal.diff"),
             }
         )
-        manifest["digest"] = canonical_hash(_seal_payload(manifest))
-        write_json(proposal / "manifest.json", manifest)
+        action_labels = {"add": "added", "modify": "modified", "delete": "deleted"}
         report = (
             f"# {manifest['title']}\n\n{manifest['rationale']}\n\n"
-            f"Digest: {manifest['digest']}\n\n"
+            "Changed files:\n"
             + "\n".join(
-                f"- {item['action']}: {item['path']} ({item['before']} -> {item['after']})"
-                for item in manifest["changes"]
+                f"- {action_labels[item['action']]}: {item['path']}" for item in manifest["changes"]
             )
             + "\n\nChecks:\n"
-            + "\n".join(f"- {item['command']}: exit {item['exit_code']}" for item in checks)
+            + "\n".join(
+                f"- {'passed' if item['exit_code'] == 0 else 'failed'}: {item['command']}"
+                for item in checks
+            )
             + "\n\nReview proposal.diff, interfaces, assumptions, and scientific evidence. "
             "Passing checks do not establish scientific validity.\n"
         )
         (proposal / "review.md").write_text(report, encoding="utf-8")
+        manifest["review_hash"] = sha256_file(proposal / "review.md")
+        manifest["digest"] = canonical_hash(_seal_payload(manifest))
+        write_json(proposal / "manifest.json", manifest)
         return manifest["digest"]
 
 
@@ -247,6 +254,10 @@ def _validate_seal(config: ProjectConfig, proposal: Path, manifest: dict) -> Non
         valid = (
             canonical_hash(_seal_payload(manifest)) == manifest["digest"]
             and sha256_file(proposal / "proposal.diff") == manifest["diff_hash"]
+            and (
+                "review_hash" not in manifest
+                or sha256_file(proposal / "review.md") == manifest["review_hash"]
+            )
             and tree_hash(proposal / "sealed", ignores=()) == manifest["candidate_hash"]
             and tree_hash(proposal / "candidate", config.snapshot_ignores)
             == manifest["candidate_hash"]
@@ -256,6 +267,82 @@ def _validate_seal(config: ProjectConfig, proposal: Path, manifest: dict) -> Non
         raise SiftError("The sealed proposal is incomplete. Reseal before review.") from exc
     if not valid:
         raise SiftError("The sealed candidate or review record changed. Reseal and review again.")
+
+
+def pending_proposals(config: ProjectConfig) -> list[dict]:
+    root = config.state_dir / "proposals"
+    pending = []
+    if not root.exists():
+        return pending
+    for path in root.iterdir():
+        manifest_path = path / "manifest.json"
+        if not manifest_path.is_file():
+            continue
+        manifest = read_json(manifest_path)
+        if manifest.get("status") not in {"ready", "applying"}:
+            continue
+        approval_path = path / "approval.json"
+        approval = read_json(approval_path) if approval_path.is_file() else {}
+        pending.append(
+            {
+                "id": manifest["id"],
+                "title": manifest["title"],
+                "rationale": manifest.get("rationale", ""),
+                "created_at": manifest.get("created_at", ""),
+                "status": manifest["status"],
+                "changes": len(manifest.get("changes", [])),
+                "checks": len(manifest.get("checks", [])),
+                "approved": approval.get("digest") == manifest.get("digest"),
+            }
+        )
+    return sorted(pending, key=lambda item: item["created_at"], reverse=True)
+
+
+def review_material(config: ProjectConfig, proposal_id: str) -> dict:
+    proposal = _proposal_dir(config, proposal_id)
+    manifest = read_json(proposal / "manifest.json")
+    if manifest.get("status") not in {"ready", "applying"}:
+        raise SiftError("Only a sealed proposal with passing checks can be reviewed.")
+    _validate_seal(config, proposal, manifest)
+    approval_path = proposal / "approval.json"
+    approval = read_json(approval_path) if approval_path.is_file() else {}
+    return {
+        **manifest,
+        "approved": approval.get("digest") == manifest.get("digest"),
+        "candidate_path": str(proposal / "candidate"),
+        "report": (proposal / "review.md").read_text(encoding="utf-8"),
+        "diff": (proposal / "proposal.diff").read_text(encoding="utf-8"),
+    }
+
+
+def approve_reviewed(
+    config: ProjectConfig,
+    proposal_id: str,
+    reviewed_digest: str,
+    reviewer: str,
+) -> str:
+    if not sys.stdin.isatty():
+        raise SiftError("Approval requires an interactive human terminal.")
+    reviewer = reviewer.strip()
+    if not reviewer:
+        raise SiftError("Reviewer name is required.")
+    with project_lock(config.state_dir):
+        proposal = _proposal_dir(config, proposal_id)
+        current = read_json(proposal / "manifest.json")
+        if current.get("status") != "ready":
+            raise SiftError("Only a sealed proposal with passing checks can be approved.")
+        _validate_seal(config, proposal, current)
+        if current.get("digest") != reviewed_digest:
+            raise SiftError("The proposal changed during review.")
+        write_json(
+            proposal / "approval.json",
+            {
+                "digest": reviewed_digest,
+                "reviewer": reviewer,
+                "approved_at": utc_now(),
+            },
+        )
+    return reviewer
 
 
 def approve(config: ProjectConfig, proposal_id: str) -> str:
@@ -276,22 +363,7 @@ def approve(config: ProjectConfig, proposal_id: str) -> str:
         reviewer = input("Reviewer name: ").strip()
     except EOFError as exc:
         raise SiftError("Approval requires input from a human reviewer.") from exc
-    if not reviewer:
-        raise SiftError("Reviewer name is required.")
-    with project_lock(config.state_dir):
-        current = read_json(proposal / "manifest.json")
-        _validate_seal(config, proposal, current)
-        if current.get("digest") != digest:
-            raise SiftError("The proposal changed during review.")
-        write_json(
-            proposal / "approval.json",
-            {
-                "digest": digest,
-                "reviewer": reviewer,
-                "approved_at": utc_now(),
-            },
-        )
-    return reviewer
+    return approve_reviewed(config, proposal_id, digest, reviewer)
 
 
 def apply(config: ProjectConfig, proposal_id: str) -> None:
