@@ -88,7 +88,7 @@ def preserve(
                 "run_id": run_id,
                 "core_source_hash": run_record.get("source_hash") if run_record else None,
                 "reproduction": (
-                    f"sift reproduce {run_id}" if run_id else "No experiment run linked."
+                    f"sift experiment reproduce {run_id}" if run_id else "No experiment run linked."
                 ),
             },
         )

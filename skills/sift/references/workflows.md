@@ -5,13 +5,13 @@
 Start uncertain work with:
 
 ```bash
-sift explore new-scoring-method --question "Does calibrated token scoring improve retrieval?"
+sift experiment new new-scoring-method --question "Does calibrated token scoring improve retrieval?"
 ```
 
 Run important computations from a frozen source snapshot:
 
 ```bash
-sift run "python scratch/new-scoring-method/experiment.py" \
+sift experiment run new-scoring-method \
   --artifact outputs/metrics.json \
   --change "Replace mean score with calibrated score"
 ```
@@ -19,27 +19,34 @@ sift run "python scratch/new-scoring-method/experiment.py" \
 Use `--parent RUN_ID` when the new run directly extends a previous run. Register outputs that support
 the research conclusion; do not register caches merely because they exist.
 
+Compare runs before deciding which code and result matter:
+
+```bash
+sift experiment compare RUN_A RUN_B
+```
+
 ## Keep an experiment's code
 
-Use `sift preserve SCRATCH_NAME --name EXPERIMENT_NAME --run RUN_ID` to keep the version of an
-experiment's code used for that run. Experiment scripts may contain one-off code. Move functions
-into core when they will be maintained and reused across experiments.
+Use `sift experiment save RUN_ID --name EXPERIMENT_NAME` to keep the version of an experiment's
+code used for that run. Experiment scripts may contain one-off code. Move functions into core when
+they will be maintained and reused across experiments.
 
 ## Prepare reusable code for review
 
-1. Run `sift propose --title TITLE --rationale RATIONALE`.
+1. Run `sift core propose --title TITLE --rationale RATIONALE --from-run RUN_ID` when an experiment
+   motivates the change. Omit `--from-run` only for maintenance changes without an experiment.
 2. Edit only the returned candidate directory.
 3. Add independent correctness tests and a bounded comparison against the reference behavior when
    both are applicable.
 4. Update callers to use the proposed public interface.
-5. Run `sift propose PROPOSAL_ID --ready`. Supply additional `--check COMMAND` arguments when the
+5. Run `sift core propose PROPOSAL_ID --ready`. Supply additional `--check COMMAND` arguments when the
    configured checks do not cover the relevant behavior.
 6. Report the public interface, behavior changes, checks, relevant experiment comparisons, and
    remaining uncertainty.
-7. Stop. Tell the human reviewer to run `sift review`. It opens the proposal in their configured
+7. Stop. Tell the human reviewer to run `sift core review`. It opens the proposal in their configured
    editor and returns to a human-controlled feedback or approval menu.
 
-If the reviewer requests changes, run `sift propose PROPOSAL_ID --feedback`, revise the candidate,
+If the reviewer requests changes, run `sift core propose PROPOSAL_ID --feedback`, revise the candidate,
 and repeat steps 3–7.
 
 A code review should explain:
@@ -52,10 +59,10 @@ A code review should explain:
 
 ## Rerun an experiment and compare results
 
-Run `sift reproduce EXPERIMENT_OR_RUN`. It uses the saved code and inputs, compares the new outputs with the
+Run `sift experiment reproduce EXPERIMENT_OR_RUN`. It uses the saved code and inputs, compares the new outputs with the
 original results, and saves that comparison separately. Matching file hashes is meaningful for deterministic outputs.
 For stochastic experiments, preserve a comparison program or metrics with scientifically justified
-tolerances using `sift run --verify COMMAND`. The verifier receives original outputs through
+tolerances using `sift experiment run NAME --verify COMMAND`. The verifier receives original outputs through
 `SIFT_REFERENCE`. Unresolved input identifiers are not enough to verify reproduction; capture actual
 data with `--input NAME=PATH` and use `SIFT_INPUT_NAME` when external input paths must be portable.
 

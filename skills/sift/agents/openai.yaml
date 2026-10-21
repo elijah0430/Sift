@@ -1,7 +1,7 @@
 interface:
   display_name: "Sift Research Code"
   short_description: "Separate explorations, experiments, and reviewed core code"
-  default_prompt: "Use $sift to explore this research change, preserve reproducible experiment code, and prepare reusable code for human review."
+  default_prompt: "Use $sift to explore this research question in scratch, compare and save experiment runs, and prepare reusable code for human review."
 
 policy:
   allow_implicit_invocation: true

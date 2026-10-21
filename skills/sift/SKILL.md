@@ -9,14 +9,14 @@ Use Sift to keep exploratory work fast while protecting maintained code.
 
 ## Choose the operation
 
-- For uncertain implementations or analyses, create or continue a scratch exploration with `sift explore`.
-- For an experiment run whose results may matter, use `sift run` to save its code, inputs, and outputs.
-- To keep an experiment's code, use `sift preserve SCRATCH_NAME --run RUN_ID` to copy the version used
-  for that run. Without a run ID, this saves the current code without checking reproducibility.
-- When functions or modules should be shared across experiments, prepare a core change for review.
-- When scratch or experiment code is no longer needed, archive it with `sift archive`.
-- Use cache reuse only when code, inputs, configuration, and randomness belong to the cache key. Use
-  `--fresh` to create a new key when reuse is inappropriate. This does not change random seeds.
+- For uncertain implementations or analyses, use `sift experiment new NAME` and work in its scratch
+  directory.
+- Run work that may support a research decision with `sift experiment run NAME`, declaring relevant
+  inputs, outputs, seeds, and configuration metadata.
+- Use `sift experiment compare RUN_A RUN_B` before deciding that a result or implementation matters.
+- Keep the exact experiment code with `sift experiment save RUN_ID` when it should remain reproducible.
+- When a function or module should be maintained and reused, prepare a core change with
+  `sift core propose --from-run RUN_ID` and submit it for human review.
 
 Read [references/workflows.md](references/workflows.md) before preparing core changes, rerunning an
 experiment, or archiving code.
@@ -30,19 +30,21 @@ the original core; only a configured OS/host sandbox prevents arbitrary writes.
 
 During ordinary exploration, write only inside the relevant scratch directory. Core may be read and imported.
 
-To move reusable code into core, run `sift propose --title TITLE --rationale RATIONALE`, edit only the
-separate review workspace it creates, then run `sift propose PROPOSAL_ID --ready`. This checks and
-saves an exact version for review. Present the reason for the change, public API, test results,
-behavior changes, and remaining uncertainty to the user.
+To move reusable code into core, run
+`sift core propose --title TITLE --rationale RATIONALE --from-run RUN_ID`, edit only the separate
+review workspace it creates, then run `sift core propose PROPOSAL_ID --ready`. This checks and saves
+an exact version for review. Cite the motivating run when the change follows from an experiment.
+Present the reason for the change, public API, test results, behavior changes, and remaining
+uncertainty to the user.
 
 Before revising a proposal returned by the reviewer, run
-`sift propose PROPOSAL_ID --feedback`. Address the concrete requests in the candidate, rerun the
+`sift core propose PROPOSAL_ID --feedback`. Address the concrete requests in the candidate, rerun the
 relevant software and experiment checks, and mark the proposal ready again.
 
-Never run `sift review`, `sift promote approve`, or `sift promote apply`. Tell the user that the core
-change is ready and ask them to run `sift review` in their terminal. That flow opens the proposal in
+Never run `sift core review`, `sift promote approve`, or `sift promote apply`. Tell the user that the core
+change is ready and ask them to run `sift core review` in their terminal. That flow opens the proposal in
 their configured editor, shows the checks, and can approve and apply the exact reviewed version. If
-the proposed code changes, run `sift propose PROPOSAL_ID --ready` again and request a new review.
+the proposed code changes, run `sift core propose PROPOSAL_ID --ready` again and request a new review.
 
 You may prepare a cleanup plan with `sift gc plan`. Never run `sift gc apply`; show its targets and
 digest to the user for human review. Pin any run or archive that must survive retention cleanup.
@@ -60,8 +62,8 @@ Distinguish:
 - saving code and logs from capturing all declared input data;
 - having code and inputs available from rerunning the experiment and comparing its outputs.
 
-Use familiar terms in reports: exploratory code, reusable modules, experiment scripts, experiment
-runs, and results. Describe what was saved, run, and checked rather than using internal status labels
+Use familiar terms in reports: scratch code, reusable modules, experiment scripts, experiment runs,
+and results. Describe what was saved, run, and checked rather than using internal status labels
 such as `restorable` or `replay-verified` as conclusions.
 
 Preserve shapes, axes, normalization, operation order, randomness, datasets, checkpoints, and model

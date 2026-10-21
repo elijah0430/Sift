@@ -11,7 +11,7 @@ from .errors import SiftError
 from .promotion import _protected_hash, prepare
 from .util import safe_id, utc_now, write_json
 
-HUMAN_ONLY = {"review", "promote approve", "promote apply", "gc apply"}
+HUMAN_ONLY = {"core review", "review", "promote approve", "promote apply", "gc apply"}
 
 
 def policy(config: ProjectConfig | None = None) -> dict:
@@ -57,7 +57,9 @@ def guard(command: list[str]) -> dict:
         raise SiftError("This command is reserved for a human reviewer or is not an agent action.")
     allowed = {
         "archive",
+        "core",
         "explore",
+        "experiment",
         "run",
         "check",
         "inspect",

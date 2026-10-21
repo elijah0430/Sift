@@ -2,8 +2,8 @@
 
 ## Store run artifacts
 
-Pass `--artifact PATH` to `sift run` for each output needed to inspect or reproduce the result, such
-as metrics, figures, or model checkpoints. Sift stores artifact content by hash.
+Pass `--artifact PATH` to `sift experiment run NAME` for each output needed to inspect or reproduce
+the result, such as metrics, figures, or model checkpoints. Sift stores artifact content by hash.
 
 Use `sift artifact put/get --store PATH` with a local or mounted store. Python integrations can use
 `LocalArtifactStore` or adapt an existing upload and download command with `CommandArtifactStore`.
@@ -45,7 +45,7 @@ copies the directory, and verifies the archive. Restore verifies the archived co
 overwrite an occupied destination. Undeclared dynamic file dependencies remain the experiment's
 responsibility.
 
-Archiving an exploration does not mean that the experiment failed. Preserve any code and results
+Archiving scratch work does not mean that the experiment failed. Save any code and results
 needed for later analysis before archiving the scratch directory.
 
 ## Clean up retained files
@@ -61,7 +61,7 @@ rechecks the digest, current references, pins, and target contents. New referenc
 plan. Only a human should apply permanent cleanup because files deleted by `sift gc apply` cannot be
 restored by Sift.
 
-Runs remain referenced by preserved experiments, related runs, reproduction comparisons, active
+Runs remain referenced by saved experiments, related runs, reproduction comparisons, active
 work, and pins. Cache objects remain while an entry or content pin retains them. Cleanup does not
 scan arbitrary external artifact stores for deletion.
 

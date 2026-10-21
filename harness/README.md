@@ -40,19 +40,19 @@ Allow toolkit-managed state changes through the permitted CLI actions, not arbit
 ## Human actions
 
 Only a human-controlled terminal or trusted host review UI may approve and apply core changes.
-The skill never runs `review`, `promote approve`, `promote apply`, or `gc apply`. A terminal flag is
+The skill never runs `core review`, `promote approve`, `promote apply`, or `gc apply`. A terminal flag is
 not proof of human identity against an unrestricted process; actual authority is supplied by the host.
 
-`sift review` lists pending core changes, opens the candidate in the configured editor, and returns
+`sift core review` lists pending core changes, opens the candidate in the configured editor, and returns
 to a human-controlled approval menu. The candidate is a local Git repository when Git is available,
 so normal editor Source Control views show the proposal. If the reviewer edits it, Sift reruns the
 configured checks and displays the refreshed diff before approval.
 
 Requesting changes removes the proposal from the human review queue. The agent reads the feedback
-with `sift propose PROPOSAL_ID --feedback`, revises the candidate, and runs
-`sift propose PROPOSAL_ID --ready`.
+with `sift core propose PROPOSAL_ID --feedback`, revises the candidate, and runs
+`sift core propose PROPOSAL_ID --ready`.
 
-`sift propose PROPOSAL_ID --ready` saves an exact version of the proposed code, diff, check results,
+`sift core propose PROPOSAL_ID --ready` saves an exact version of the proposed code, diff, check results,
 and original project state. Editing reviewed content requires running the checks again and obtaining
 new approval. Sift validates that version again before applying the changes.
 

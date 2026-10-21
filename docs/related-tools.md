@@ -7,7 +7,7 @@ The tools below are useful references and potential integrations.
 | Tool | Main idea relevant to Sift | Relationship to Sift |
 |---|---|---|
 | [Cookiecutter Data Science](https://github.com/drivendataorg/cookiecutter-data-science) | A familiar directory structure separates notebooks, reports, data, models, and importable source code. | Sift keeps the separation but maps it onto an existing repository and manages how code moves between roles. |
-| [DVC](https://github.com/treeverse/dvc) | Experiments can be run, compared, queued, removed, or made persistent. Data and model outputs are versioned with the code that produced them. | DVC is the closest reference for experiment lifecycle and comparison. Sift adds preserved experiment code and human-reviewed promotion into core. |
+| [DVC](https://github.com/treeverse/dvc) | Experiments can be run, compared, queued, removed, or made persistent. Data and model outputs are versioned with the code that produced them. | DVC is the closest reference for experiment lifecycle and comparison. Sift adds saved experiment code and human-reviewed changes to core. |
 | [MLflow](https://github.com/mlflow/mlflow) | A run records parameters, metrics, code versions, and artifacts and can be queried through an API or UI. | Sift uses the established terms *run* and *artifact* and focuses on local source and input snapshots. MLflow remains a natural external tracking backend. |
 | [Sacred](https://github.com/IDSIA/sacred) | Experiments expose configuration, record run context through observers, and support controlled random seeds. | Sacred is a useful model for low-overhead configuration and metadata capture. Sift records seeds but leaves framework-specific random-number setup to the experiment. |
 | [Kedro](https://github.com/kedro-org/kedro) | Reusable functions become nodes in modular pipelines with pipeline-specific configuration and tests. | Kedro shows how reusable research code can gain clear interfaces and tests. Sift does not require experiments to adopt a pipeline abstraction. |
@@ -27,9 +27,9 @@ The corresponding official documentation describes the specific ideas referenced
 
 ## Ideas worth carrying into Sift
 
-1. **A compact experiment comparison view.** DVC's `exp show` and MLflow's run search make it easy to
-   compare configurations, metrics, parents, and outputs. Sift has the underlying run records but
-   should present them in one researcher-facing view.
+1. **A compact experiment comparison view.** Following DVC's `exp show` and MLflow's run search,
+   `sift experiment list` and `sift experiment compare` show configurations, inputs, parent runs,
+   status, and scalar values from declared JSON results in one researcher-facing table.
 2. **Explicit run relationships.** MLflow's grouped runs and Metaflow's run hierarchy make search and
    debugging easier. Sift already records parent runs; named tags and a clearer iteration history
    would make that information more useful.
@@ -51,8 +51,8 @@ These tools provide strong solutions for their respective parts of the research 
 specific role is to connect four decisions that otherwise remain informal:
 
 1. Explore uncertain ideas in scratch.
-2. Preserve the exact experiment code and evidence that matter.
-3. Identify code that should be maintained and reused.
+2. Compare runs and save the exact experiment code and evidence that matter.
+3. Cite the motivating experiment when proposing code that should be maintained and reused.
 4. Require a researcher to review that exact change before it enters core.
 
 Sift should remain a small lifecycle layer around existing research tools. Reimplementing a tracking

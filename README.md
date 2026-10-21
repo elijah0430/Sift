@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>Explore freely. Preserve experiments. Review shared code.</strong><br>
+  <strong>Explore freely. Compare experiments. Review shared code.</strong><br>
   A Python toolkit for organizing research code written with coding agents.
 </p>
 
@@ -20,19 +20,17 @@
   <a href="docs/related-tools.md">Related tools</a>
 </p>
 
-Coding agents make rapid research iteration easier, but repeated edits can mix preliminary analyses,
-experiment-specific scripts, and reusable code into one difficult codebase. Sift gives each kind of
-code a separate path:
+Coding agents make research iteration faster, but repeated edits can mix preliminary analyses,
+experiment scripts, and reusable code. Sift separates three things:
 
-- **Explore** uncertain ideas in scratch without modifying maintained code.
-- **Run** experiments from saved source and input snapshots and keep their outputs and logs.
-- **Preserve** the exact experiment code needed to reproduce an important result.
-- **Review** reusable code before it enters the maintained project.
+- **Scratch** is where the researcher and agent try uncertain ideas.
+- **Experiments** are runs that can be saved, compared, and reproduced.
+- **Core changes** are reusable code proposed for human review.
 
 Sift works inside an existing Python repository. It does not replace the project's training
 framework, configuration system, scheduler, or experiment tracker.
 
-![Sift workflow: exploratory code, experiment runs, code review, reusable modules, and archived code.](assets/workflow.svg)
+![Sift workflow: scratch work, experiment comparison, saved experiments, and reviewed core changes.](assets/workflow.svg)
 
 ## Quick start
 
@@ -47,46 +45,50 @@ sift init
 A typical iteration looks like this:
 
 ```bash
-# The agent explores and runs an experiment.
-sift explore sampler-study
-sift run "python scratch/sampler-study/experiment.py" \
+# Work freely in scratch, then run a saved snapshot.
+sift experiment new sampler-study
+sift experiment run sampler-study \
   --artifact results/metrics.json \
   --input dataset=data/train.json \
-  --seed 7
+  --seed 7 \
+  --meta method=baseline
 
-# Keep the experiment code that produced an important run.
-sift preserve sampler-study --name sampler-ablation --run RUN_ID
+# Compare runs and keep the experiment code that matters.
+sift experiment compare RUN_A RUN_B
+sift experiment save RUN_B --name sampler-ablation
 
-# Prepare a reusable function for review.
-sift propose --title "Share the calibrated sampler" \
-  --rationale "Two experiments now use the same implementation"
+# Propose reusable code, citing the experiment that motivated it.
+sift core propose --title "Share the calibrated sampler" \
+  --rationale "Two experiments now use the same implementation" \
+  --from-run RUN_B
 # Edit the proposal directory printed by Sift, then:
-sift propose PROPOSAL_ID --ready
+sift core propose PROPOSAL_ID --ready
 
-# The researcher reviews the core change and can reproduce the experiment.
-sift review
-sift reproduce sampler-ablation
+# The researcher reviews the exact change before it enters core.
+sift core review
+sift experiment reproduce sampler-ablation
 ```
 
-Sift prints `RUN_ID` and `PROPOSAL_ID` when they are created. Run `sift status` at any time to see
-active explorations, experiment runs, and proposals awaiting review.
+`sift experiment list` shows recent runs with their configuration, inputs, status, and scalar values
+from declared JSON results. `sift experiment compare` shows the same fields for selected runs. Run
+`sift status` to see scratch work, saved experiments, and core changes awaiting review.
 
 ## How Sift organizes code
 
 | Area | Purpose |
 |---|---|
 | **Scratch** | Preliminary analyses, debugging, notebooks, and uncertain ideas |
-| **Experiments** | Scripts and configurations kept to reproduce particular results |
+| **Experiments** | Saved code and runs used to compare or reproduce particular results |
 | **Core** | Tested modules maintained and reused across experiments |
 
 These directories are configured in `research.toml`, so an existing repository does not need to be
-reorganized. Experiment code can remain experiment-specific indefinitely; preserving a result does
-not require turning its script into a shared module.
+reorganized. Experiment code can remain experiment-specific indefinitely. It enters core only when
+the researcher decides it should be maintained and reused.
 
 ## Human review for core changes
 
 An agent prepares a core change in a separate review workspace and runs the configured checks. The
-researcher opens it with `sift review`, using normal editor diffs or a terminal diff. The researcher
+researcher opens it with `sift core review`, using normal editor diffs or a terminal diff. The researcher
 can request changes, rerun checks after editing, approve the displayed version, or leave it for later.
 
 The agent workflow cannot approve or apply a proposal. Approval is tied to the exact code, diff,

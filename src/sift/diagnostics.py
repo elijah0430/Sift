@@ -82,7 +82,7 @@ def doctor(config: ProjectConfig, recover: bool = False) -> dict:
                 {
                     "type": "interrupted-application",
                     "id": record["id"],
-                    "action": f"Human: sift review {record['id']}",
+                    "action": f"Human: sift core review {record['id']}",
                 }
             )
     return {"issues": issues, "active": active, "recovered": recover}

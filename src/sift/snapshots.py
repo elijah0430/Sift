@@ -21,6 +21,7 @@ from .util import (
     safe_id,
     sha256_file,
     short_id,
+    slugify,
     tree_hash,
     utc_now,
     write_json,
@@ -264,6 +265,7 @@ def create_run(
     environment: str = "current",
     cache_refs: Iterable[str] = (),
     launcher: str | None = None,
+    exploration: str | None = None,
 ) -> tuple[str, int]:
     metadata_values = _named_values(metadata)
     input_values, seed_values, output_paths = list(inputs), list(seeds), list(artifacts)
@@ -272,6 +274,12 @@ def create_run(
         contained_path(config.root, value)
     if parent:
         read_json(config.state_dir / "runs" / safe_id(parent) / "manifest.json")
+    exploration_name = slugify(exploration) if exploration else None
+    if (
+        exploration_name
+        and not contained_path(config.root / config.scratch, exploration_name).is_dir()
+    ):
+        raise SiftError(f"Exploration does not exist: {exploration}")
     refs = [safe_id(value) for value in cache_refs]
     for value in refs:
         read_json(config.state_dir / "cache" / "entries" / f"{value}.json")
@@ -284,6 +292,7 @@ def create_run(
         "status": "preparing",
         "started_at": utc_now(),
         "command": command,
+        "exploration": exploration_name,
         "parent": parent,
         "change": change,
         "seeds": seed_values,

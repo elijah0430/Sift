@@ -22,11 +22,15 @@ def test_guard_rejects_human_only_command():
         _guard(["sift", "promote", "approve", "proposal-1"])
     with pytest.raises(SiftError, match="human"):
         _guard(["sift", "review", "proposal-1"])
+    with pytest.raises(SiftError, match="human"):
+        _guard(["sift", "core", "review", "proposal-1"])
 
 
 def test_guard_allows_research_lifecycle_commands():
     for command in (
         ["sift", "status"],
+        ["sift", "experiment", "new", "baseline"],
+        ["sift", "core", "propose", "--title", "Shared loader"],
         ["sift", "propose", "--title", "Shared loader"],
         ["sift", "reproduce", "baseline-study"],
         ["sift", "archive", "scratch/old-idea"],

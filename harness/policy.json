@@ -4,6 +4,7 @@
   "bubblewrap_backend": "Linux read-only filesystem with writable candidate and temporary files",
   "candidate_backend": "isolated working copy plus original-core change detection",
   "human_only": [
+    "sift core review",
     "sift gc apply",
     "sift promote apply",
     "sift promote approve",

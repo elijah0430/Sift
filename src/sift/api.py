@@ -11,7 +11,7 @@ from .promotion import (
     seal,
 )
 from .snapshots import create_run, load_run, replay_run
-from .workspace import resolve_run, workspace_status
+from .workspace import compare_experiments, experiment_runs, resolve_run, workspace_status
 
 __all__ = [
     "ArtifactRef",
@@ -21,6 +21,8 @@ __all__ = [
     "ProjectConfig",
     "create_exploration",
     "create_run",
+    "compare_experiments",
+    "experiment_runs",
     "initialize_project",
     "load_run",
     "prepare",

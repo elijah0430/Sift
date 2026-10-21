@@ -1,11 +1,12 @@
 # Experiment runs and reproducibility
 
-An **experiment run** is one execution of a script or command. Sift saves a source snapshot, executes
+An **experiment run** is one execution of a scratch experiment. Sift saves a source snapshot, executes
 a separate copy, and records the command, related previous run, description of the change, declared
 inputs, random seeds, runtime information, dependency files, logs, and declared output files.
 
 ```bash
-sift run "python scratch/my-method/train.py" \
+sift experiment new my-method
+sift experiment run my-method --command "python scratch/my-method/train.py" \
   --artifact results/metrics.json \
   --input dataset=data/train.json \
   --seed 7 \
@@ -30,25 +31,39 @@ The default environment preserves information about the active or project-local 
 libraries, GPU drivers, and accessible hardware remain execution prerequisites. Sift does not promise
 bitwise equality across different GPU stacks.
 
-## Preserve experiment code
+## Compare runs
+
+List recent runs or compare selected runs:
+
+```bash
+sift experiment list
+sift experiment compare RUN_A RUN_B
+```
+
+The table includes run relationships, seeds, metadata supplied with `--meta`, declared input
+identities, and scalar or flat-list values from declared JSON artifacts. It reads the immutable
+copies saved with each run. Other file types remain available as artifacts but are not expanded into
+comparison columns.
+
+## Save experiment code
 
 After a useful run, save the exact experiment code from its source snapshot:
 
 ```bash
-sift preserve SCRATCH_NAME --name EXPERIMENT_NAME --run RUN_ID
+sift experiment save RUN_ID --name EXPERIMENT_NAME
 ```
 
 This copies the code used for the run rather than the possibly edited live scratch directory. The
-preserved experiment records its source hash and reproduction command. Its linked run is protected
+saved experiment records its source hash and reproduction command. Its linked run is protected
 from retention cleanup.
 
-Experiment scripts may contain one-off code. Preserve them when they are needed to reproduce a
+Experiment scripts may contain one-off code. Save them when they are needed to reproduce a
 result; move a function into core when it will be maintained and reused.
 
 ## Reproduce and compare
 
 ```bash
-sift reproduce EXPERIMENT_OR_RUN
+sift experiment reproduce EXPERIMENT_OR_RUN
 ```
 
 Sift validates the saved code and inputs, starts a new execution without previous output files, and
@@ -58,7 +73,7 @@ For deterministic outputs, Sift compares declared output hashes. For stochastic 
 program that implements justified numerical tolerances or statistical criteria:
 
 ```bash
-sift run "python experiment.py" \
+sift experiment run NAME --command "python scratch/NAME/experiment.py" \
   --artifact results/metrics.json \
   --verify "python verify.py"
 ```
@@ -67,7 +82,9 @@ The verifier can read the original outputs through `SIFT_REFERENCE`. A successfu
 declared outputs or a comparison program is not enough to verify reproduction. Likewise, rerunning a
 failed command does not reproduce a successful result.
 
-Use `sift inspect runs RUN_ID` to inspect a run together with its later reproduction comparisons.
+Use `sift --json experiment compare RUN_A RUN_B` for structured comparison output. The lower-level
+`sift inspect runs RUN_ID` command shows a full run record together with later reproduction
+comparisons.
 
 ## Export a run
 

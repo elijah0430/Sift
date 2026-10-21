@@ -22,7 +22,7 @@ the current commit; this document is not itself a test result or a claim of scie
 | Configured checks cannot be bypassed by extra checks | promotion.py | configured-check invariant |
 | Exact human-reviewed candidate only | promotion.py | missing approval, reseal, post-review edit, report mutation tests |
 | One-command terminal review and apply | cli.py, promotion.py | displayed-version apply and post-display mutation tests |
-| Researcher dashboard and experiment-name reproduction | workspace.py, cli.py | workspace lifecycle tests |
+| Researcher dashboard, run comparison, and experiment-name reproduction | workspace.py, cli.py | workspace lifecycle and comparison tests |
 | Editor-native local code review | promotion.py, cli.py | clean Git baseline and changed-file visibility tests |
 | Requested-change round trip | promotion.py, cli.py | feedback state and revised-proposal tests |
 | Cache/export/artifact CLI cannot bypass maintained-code or approval-state protection | config.py | test_write_boundary.py |

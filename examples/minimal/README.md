@@ -4,8 +4,9 @@ This example uses only Python's standard library. Start from this directory with
 
 ~~~bash
 sift check
-sift run "python scratch/baseline/experiment.py" --artifact results/metrics.json --input dataset=data/original.json
-sift run "python scratch/expanded/experiment.py" --artifact results/metrics.json --input dataset=data/shifted.json --seed 7 --meta model=scaled
+sift experiment run baseline --artifact results/metrics.json --input dataset=data/original.json --meta method=baseline
+sift experiment run expanded --artifact results/metrics.json --input dataset=data/shifted.json --seed 7 --meta method=scaled
+sift experiment compare RUN_A RUN_B
 ~~~
 
 The baseline mean absolute error is 1.5. The expanded experiment introduces another dataset, a scaled
@@ -15,9 +16,9 @@ about a real ML method. Core does not branch on either experiment's name.
 Use the first printed run ID to keep the baseline script and link it to that run's results:
 
 ~~~bash
-sift preserve baseline --name baseline-study --run RUN_ID
+sift experiment save RUN_A --name baseline-study
 sift archive scratch/baseline
-sift reproduce baseline-study
+sift experiment reproduce baseline-study
 ~~~
 
 You can rerun the baseline and check its results after archiving its scratch directory.
@@ -25,7 +26,9 @@ You can rerun the baseline and check its results after archiving its scratch dir
 To move a shared metric into core, prepare a separate working copy:
 
 ~~~bash
-sift propose --title "Share clipped mean absolute error" --rationale "Two studies need the metric"
+sift core propose --title "Share clipped mean absolute error" \
+  --rationale "Two studies need the metric" \
+  --from-run RUN_B
 ~~~
 
 Inside the printed candidate directory, extract the metric into core, add known-value and edge-case
@@ -33,13 +36,13 @@ tests, update callers, and run the core tests without scratch on the import path
 project, run the checks and save the proposed changes for review:
 
 ~~~bash
-sift propose PROPOSAL_ID --ready
+sift core propose PROPOSAL_ID --ready
 ~~~
 
 Review the code diff, API, assumptions, and test results. A human then runs:
 
 ~~~bash
-sift review PROPOSAL_ID
+sift core review PROPOSAL_ID
 ~~~
 
 Review the change in the configured editor or terminal diff. Choose `a` to approve and apply it, or

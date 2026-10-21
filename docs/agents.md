@@ -5,17 +5,18 @@ controls changes to maintained code.
 
 ## Agent workflow
 
-The agent normally uses five commands:
+The agent normally works through two command groups:
 
 | Research task | Command |
 |---|---|
-| Start uncertain work | `sift explore NAME` |
-| Execute a saved source snapshot | `sift run COMMAND` |
-| Keep experiment code | `sift preserve SCRATCH --name EXPERIMENT --run RUN_ID` |
-| Prepare reusable code | `sift propose` |
-| Set unused work aside | `sift archive PATH` |
+| Start uncertain work | `sift experiment new NAME` |
+| Execute a saved source snapshot | `sift experiment run NAME` |
+| Compare selected runs | `sift experiment compare RUN_A RUN_B` |
+| Keep experiment code | `sift experiment save RUN_ID` |
+| Prepare reusable code | `sift core propose --from-run RUN_ID` |
 
-The agent may inspect status, proposals, runs, and reviewer feedback. It does not run `sift review`,
+The agent may inspect status, experiments, runs, proposals, and reviewer feedback. It does not run
+`sift core review`,
 approve or apply core changes, or apply permanent cleanup.
 
 ## Install the agent skill
@@ -37,7 +38,7 @@ Inspect Sift's machine-readable agent policy with:
 
 ```bash
 sift harness policy
-sift harness guard -- sift propose --title "Shared evaluation function"
+sift harness guard -- sift core propose --title "Shared evaluation function"
 ```
 
 `guard` validates Sift command arguments and rejects human-only commands. A host can also call
@@ -67,6 +68,6 @@ sift harness launch --sandbox bubblewrap -- your-coding-agent
 This makes the filesystem read-only except for the working copy and temporary runtime files. The
 command fails if bubblewrap cannot start instead of silently using weaker isolation.
 
-Only a human-controlled terminal or trusted host review interface should run `sift review` or
+Only a human-controlled terminal or trusted host review interface should run `sift core review` or
 `sift gc apply`. Interactive input alone does not authenticate a human against an unrestricted
 same-user agent.

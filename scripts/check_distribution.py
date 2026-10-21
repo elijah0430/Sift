@@ -52,18 +52,29 @@ def main():
 
         assert f"sift {version}" in run("--version")
         help_text = run("--help")
-        for command in ("status", "review", "reproduce", "propose", "archive"):
+        for command in ("init", "status", "experiment", "core", "reproduce"):
             assert command in help_text
-        assert "--editor" in run("review", "--help")
-        assert "--reviewer" in run("review", "--help")
-        assert "--terminal" in run("review", "--help")
+        assert "cache" not in help_text
+        assert "promote" not in help_text
+        assert "--editor" in run("core", "review", "--help")
+        assert "--reviewer" in run("core", "review", "--help")
+        assert "--terminal" in run("core", "review", "--help")
         run("skill", "install", "--target", str(temporary / "skills"))
         assert (temporary / "skills/sift/SKILL.md").is_file()
         assert json.loads(run("harness", "policy"))["actor"] == "agent"
         project = temporary / "research"
         run("init", str(project))
         result = subprocess.run(
-            [str(python), "-I", "-m", "sift", "--json", "explore", "wheel-test"],
+            [
+                str(python),
+                "-I",
+                "-m",
+                "sift",
+                "--json",
+                "experiment",
+                "new",
+                "wheel-test",
+            ],
             cwd=project,
             env=env,
             text=True,

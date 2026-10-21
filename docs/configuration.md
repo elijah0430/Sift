@@ -62,14 +62,15 @@ The selected tool must be installed in the project environment. The built-in rul
 |---|---|
 | **uv** | Reconstruct an experiment environment from `uv.lock` with `--environment uv` |
 | **VS Code or another editor** | Set `[review].command`, `VISUAL`, or `EDITOR` |
-| **marimo** | `sift explore NAME --notebook` creates a reactive scratch notebook |
+| **marimo** | `sift experiment new NAME --notebook` creates a reactive scratch notebook |
 | **Local or mounted storage** | `sift artifact put/get --store PATH` |
 | **Existing remote storage** | Adapt explicit upload and download commands with `CommandArtifactStore` |
-| **Slurm or another scheduler** | `sift run ... --launcher "srun --partition=gpu"` |
+| **Slurm or another scheduler** | `sift experiment run NAME --launcher "srun --partition=gpu"` |
+| **Hydra, Snakemake, or Metaflow** | Run the existing command with `--command`; save resolved configuration, backend run IDs, and outputs as metadata or declared artifacts |
 | **Python applications** | Use the operations and storage adapters in [`sift.api`](../src/sift/api.py) |
 
 The scheduler launcher is synchronous and assumes that the source path and environment are visible
 on the execution node. It does not upload a project or provision a cluster.
 
-Use `sift --json COMMAND` when a program needs structured output. `sift review` remains interactive
+Use `sift --json COMMAND` when a program needs structured output. `sift core review` remains interactive
 so that the code and approval decision stay visible to the researcher.

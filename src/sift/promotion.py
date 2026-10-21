@@ -483,7 +483,7 @@ def apply(config: ProjectConfig, proposal_id: str, *, reviewed_digest: str | Non
         proposal = _proposal_dir(config, proposal_id)
         manifest = read_json(proposal / "manifest.json")
         if reviewed_digest is not None and manifest.get("digest") != reviewed_digest:
-            raise SiftError("The proposal changed during review. Run sift review again.")
+            raise SiftError("The proposal changed during review. Run sift core review again.")
         approval = read_json(proposal / "approval.json")
         if manifest["status"] not in {"ready", "applying"} or approval.get(
             "digest"

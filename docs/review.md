@@ -5,11 +5,13 @@ in a separate directory; the researcher's working core remains unchanged until a
 
 ## Prepare a proposal
 
-The agent starts a proposal and edits the returned directory:
+The agent starts a proposal and edits the returned directory. `--from-run` accepts a run ID or a
+saved experiment name:
 
 ```bash
-sift propose --title "Share the calibrated scorer" \
-  --rationale "Two experiments use the same scoring function"
+sift core propose --title "Share the calibrated scorer" \
+  --rationale "Two experiments use the same scoring function" \
+  --from-run RUN_ID
 ```
 
 When Git is available, the proposal directory is a local repository whose first commit contains the
@@ -18,7 +20,7 @@ baseline. Editor Source Control views therefore show proposed files as ordinary 
 After adding appropriate tests and updating callers, the agent marks the proposal ready:
 
 ```bash
-sift propose PROPOSAL_ID --ready
+sift core propose PROPOSAL_ID --ready
 ```
 
 This runs import-boundary checks and the checks configured in `research.toml`, then saves the exact
@@ -30,11 +32,12 @@ with `--check COMMAND`.
 The researcher runs:
 
 ```bash
-sift review
+sift core review
 ```
 
-Sift shows the purpose, changed files, and check results. It can open the proposal in the configured
-editor, and always retains a terminal diff. The review menu provides these actions:
+Sift shows the purpose, the motivating run's configuration and JSON results, changed files, and
+check results. It can open the proposal in the configured editor, and always retains a terminal
+diff. The review menu provides these actions:
 
 ```text
 [o] open code review  [d] terminal diff  [c] checks
@@ -48,7 +51,8 @@ Configure an editor in `research.toml`:
 command = "code --wait"
 ```
 
-Sift also honors `VISUAL`, `EDITOR`, and `sift review --editor`. Use `sift review --terminal` to stay
+Sift also honors `VISUAL`, `EDITOR`, and `sift core review --editor`. Use
+`sift core review --terminal` to stay
 in the terminal.
 
 If the reviewer edits the proposal, Sift can rerun the same checks and show the refreshed diff before
@@ -56,10 +60,10 @@ approval. Requesting changes stores feedback with the reviewed version and remov
 the review queue. The agent reads it with:
 
 ```bash
-sift propose PROPOSAL_ID --feedback
+sift core propose PROPOSAL_ID --feedback
 ```
 
-The agent then revises the proposal and runs `sift propose PROPOSAL_ID --ready` again.
+The agent then revises the proposal and runs `sift core propose PROPOSAL_ID --ready` again.
 
 ## What approval covers
 
@@ -73,7 +77,8 @@ when affected files still match their recorded before or after contents. A concu
 revision cannot be substituted into an already open review session.
 
 The lower-level `promote` commands expose the underlying prepare, seal, approve, and apply operations.
-They are intended for integration and recovery; the normal researcher interface is `sift review`.
+They are intended for integration and recovery; the normal researcher interface is
+`sift core review`.
 
 Software checks establish properties of the implementation. They do not establish the scientific
 validity of the proposed method or its empirical claims.
